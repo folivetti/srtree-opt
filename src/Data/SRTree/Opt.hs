@@ -50,15 +50,15 @@ getTheta = LA.fromList . go
     go Empty         = []
     go (Var ix)      = []
     go (Param ix)    = []
-    go (Const v)     = [v]
+    go (Const v)     = if fromIntegral (round v) == v then [] else [v]
     go (Fun f t)     = go t
     go (Pow t i)     = go t
     go (Add l r)     = go l <> go r
     go (Sub l r)     = go l <> go r
     go (Mul l r)     = go l <> go r
     go (Div l r)     = go l <> go r
-    go (Power l r)   = go l
-    go (LogBase l r) = go l
+    go (Power l r)   = go l <> go r
+    go (LogBase l r) = go l <> go r
 
 replaceTheta :: SRTree Int Double -> Column -> SRTree Int Double
 replaceTheta tree theta = go tree `evalState` LA.toList theta
@@ -74,8 +74,8 @@ replaceTheta tree theta = go tree `evalState` LA.toList theta
     go (Sub l r)     = do { l' <- go l; r' <- go r; pure $ Sub l' r' }
     go (Mul l r)     = do { l' <- go l; r' <- go r; pure $ Mul l' r' }
     go (Div l r)     = do { l' <- go l; r' <- go r; pure $ Div l' r' }
-    go (Power l r)   = do { l' <- go l; pure $ Power l' r }
-    go (LogBase l r) = do { l' <- go l; pure $ LogBase l' r }
+    go (Power l r)   = do { l' <- go l; r' <- go r; pure $ Power l' r' }
+    go (LogBase l r) = do { l' <- go l; r' <- go r; pure $ LogBase l' r' }
 
 
 constToParam :: SRTree Int Double -> SRTree Int Double
@@ -85,15 +85,15 @@ constToParam tree = go tree `evalState` 0
     go Empty         = pure Empty
     go (Var ix)      = pure $ Var ix
     go (Param ix)    = pure $ Param ix
-    go (Const _)     = do { ix <- get; modify (+1); pure (Param ix) }
+    go (Const v)     = if fromIntegral (round v) == v then pure (Const v) else do { ix <- get; modify (+1); pure (Param ix) }
     go (Fun f t)     = Fun f <$> go t
     go (Pow t i)     = (`Pow` i) <$> go t
     go (Add l r)     = do { l' <- go l; r' <- go r; pure $ Add l' r' }
     go (Sub l r)     = do { l' <- go l; r' <- go r; pure $ Sub l' r' }
     go (Mul l r)     = do { l' <- go l; r' <- go r; pure $ Mul l' r' }
     go (Div l r)     = do { l' <- go l; r' <- go r; pure $ Div l' r' }
-    go (Power l r)   = do { l' <- go l; pure $ Power l' r }
-    go (LogBase l r) = do { l' <- go l; pure $ LogBase l' r }
+    go (Power l r)   = do { l' <- go l; r' <- go r; pure $ Power l' r' }
+    go (LogBase l r) = do { l' <- go l; r' <- go r; pure $ LogBase l' r' }
 
 paramToVar :: SRTree Int a -> SRTree Int a
 paramToVar tree = go tree
@@ -109,8 +109,8 @@ paramToVar tree = go tree
     go (Sub l r)     = Sub (go l) (go r)
     go (Mul l r)     = Mul (go l) (go r)
     go (Div l r)     = Div (go l) (go r)
-    go (Power l r)   = Power (go l) r
-    go (LogBase l r) = LogBase (go l) r
+    go (Power l r)   = Power (go l) (go r)
+    go (LogBase l r) = LogBase (go l) (go r)
 
 varToConst :: Columns -> SRTree Int Double -> SRTree Int Column
 varToConst xss = go
@@ -126,8 +126,8 @@ varToConst xss = go
     go (Sub l r)     = Sub (go l) (go r)
     go (Mul l r)     = Mul (go l) (go r)
     go (Div l r)     = Div (go l) (go r)
-    go (Power l r)   = Power (go l) (fmap LA.scalar r)
-    go (LogBase l r) = LogBase (go l) (fmap LA.scalar r)
+    go (Power l r)   = Power (go l) (go r)
+    go (LogBase l r) = LogBase (go l) (go r)
 
 optimize :: Int -> Columns -> Column -> SRTree Int Double -> SRTree Int Double
 optimize niter xss ys tree = let t0    = getTheta tree
