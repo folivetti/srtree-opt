@@ -12,7 +12,6 @@ import Data.List.Split ( splitOn )
 import Data.List ( sortOn )
 import Data.SRTree ( OptIntPow(..), SRTree(..), deriveBy, evalTree, evalTreeMap )
 import Numeric.GSL.Fitting (nlFitting, FittingMethod(..))
-import Debug.Trace ( trace )
 
 type Columns = V.Vector Column
 type Column  = LA.Vector Double

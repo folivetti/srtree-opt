@@ -42,6 +42,7 @@ library
     , pandoc-symreg >=0.1.0.1
     , split
     , srtree >=0.1.2.1 && <0.1.3
+    , srtree-eqsat
     , vector
   default-language: Haskell2010
 
@@ -63,6 +64,7 @@ executable srtree-opt-exe
     , pandoc-symreg >=0.1.0.1
     , split
     , srtree >=0.1.2.1 && <0.1.3
+    , srtree-eqsat
     , srtree-opt
     , vector
   default-language: Haskell2010
@@ -86,6 +88,7 @@ test-suite srtree-opt-test
     , pandoc-symreg >=0.1.0.1
     , split
     , srtree >=0.1.2.1 && <0.1.3
+    , srtree-eqsat
     , srtree-opt
     , vector
   default-language: Haskell2010

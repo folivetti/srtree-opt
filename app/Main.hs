@@ -14,6 +14,7 @@ import Data.SRTree
 import qualified Data.SRTree.Print as P
 import System.IO 
 import Control.Monad
+import Data.SRTree.EqSat
 
 envelope :: a -> [a] -> [a]
 envelope c xs = c : xs <> [c]
@@ -142,8 +143,9 @@ main = do
       varnames  = intercalate "," (map (B.unpack.fst) headers)
       sseTr     = show . sse xTr yTr
       sseVal    = show . sse xVal yVal
-      genStats  tree = let t = optimizer tree
-                        in (t, intercalate "," [sseTr tree, sseVal tree, sseTr t, sseVal t])
+      genStats  tree = let tree' = if (simpl args) then simplifyEqSat tree else tree
+                           t = optimizer tree'
+                        in (t, intercalate "," [sseTr tree', sseVal tree', sseTr t, sseVal t])
   withInput (infile args) (from args) varnames False
     >>= printResults (outfile args) (stats args) genStats
   
