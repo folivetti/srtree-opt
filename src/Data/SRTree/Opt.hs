@@ -1,35 +1,49 @@
 {-# language FlexibleInstances #-}
 {-# language OverloadedStrings #-}
-module Data.SRTree.Opt where
+{-# language ImportQualifiedPost #-}
+module Data.SRTree.Opt
+    ( loadDataset, optimize, splitTrainVal, sse, mse, rmse, Column, Columns )
+    where
 
-import qualified Data.Vector as V
-import qualified Numeric.LinearAlgebra as LA
-import Control.Monad.State ( gets, modify, evalState, MonadState(get), State )
-import Control.Monad.Reader ( runReader )
-import Data.Maybe ( fromJust )
-import qualified Data.ByteString.Char8 as B
-import Data.List.Split ( splitOn )
-import Data.List ( sortOn )
-import Data.SRTree ( OptIntPow(..), SRTree(..), deriveBy, evalTree, evalTreeMap )
-import Numeric.GSL.Fitting (nlFitting, FittingMethod(..))
+import Control.Arrow ((&&&))
+import Control.Monad.Reader (runReader)
+import Control.Monad.State (MonadState (get), State, evalState, gets, modify)
+import Data.ByteString.Char8 qualified as B
+import Data.List (sortOn)
+import Data.List.Split (splitOn)
+import Data.Maybe (fromJust)
+import Data.SRTree (OptIntPow (..), SRTree (..), deriveBy, evalTree, evalTreeMap)
+import Data.Vector qualified as V
+import Numeric.GSL.Fitting (FittingMethod (..), nlFitting)
+import Numeric.LinearAlgebra qualified as LA
 
 type Columns = V.Vector Column
 type Column  = LA.Vector Double
 
 byteshow :: Int -> B.ByteString
 byteshow = B.pack . show
+{-# INLINE byteshow #-}
+
+loadMtx :: [[String]] -> LA.Matrix Double
+loadMtx = LA.fromLists . map (map read)
+{-# INLINE loadMtx #-}
+
+toColumns :: [Int] -> LA.Matrix Double -> [LA.Vector Double]
+toColumns ixs = LA.toColumns . (LA.¿ ixs)
+{-# INLINE toColumns #-}
 
 loadDataset :: String -> [Int] -> Int -> Bool -> IO ((Columns, Column), [(B.ByteString, Int)])
 loadDataset filename columns target hasHeader = do
   content <- map (splitOn ",") . lines <$> readFile filename
-  let datum    = LA.fromLists . map (map read) . (if hasHeader then tail else id) $ content
-      columns' = if null columns then [0 .. snd (LA.size datum) - 2] else columns
-      target'  = if target < 0 then snd (LA.size datum) - 1 else target
-      xss      = V.fromList . LA.toColumns $ datum LA.¿ columns'
-      ys       = head . LA.toColumns $ datum LA.¿ [target']
-      header   = if hasHeader
-                   then sortOn snd $ zip (map B.pack $ head content) columns'
-                   else map (\ix -> ("x" <> byteshow ix,ix)) [0 .. length columns' - 1]
+  let
+    datum     =  loadMtx $ (if hasHeader then tail else id) content
+    (_, n)    = LA.size datum
+    columns'  = if null columns then [0 .. n - 2] else columns
+    target'   = if target < 0 then [n - 1] else [target]
+    (xss, ys) = (V.fromList . toColumns columns' &&& head . toColumns target' ) datum
+    header    = if hasHeader
+                  then sortOn snd $ zip (map B.pack $ head content) columns'
+                  else map (("x" <>) . byteshow &&& id) [0 .. length columns' - 1]
   pure ((xss, ys), header)
 
 splitTrainVal :: Int -> (Columns, Column) -> ((Columns, Column), (Columns, Column))
@@ -38,7 +52,7 @@ splitTrainVal nrows (xss, ys)
   | nrows <= 0 = ( (xss, ys), (xss, ys) )
   | otherwise  = ( (V.map getTrain xss, getTrain ys), (V.map getVal xss, getVal ys) )
   where
-    n = LA.size ys
+    n        = LA.size ys
     getTrain = LA.subVector 0 nrows
     getVal   = LA.subVector nrows (n - nrows)
 
@@ -47,11 +61,11 @@ getTheta = LA.fromList . go
   where
     go :: SRTree Int Double -> [Double]
     go Empty         = []
-    go (Var ix)      = []
-    go (Param ix)    = []
-    go (Const v)     = if fromIntegral (round v) == v then [] else [v]
-    go (Fun f t)     = go t
-    go (Pow t i)     = go t
+    go (Var _)       = []
+    go (Param _)     = []
+    go (Const v)     = [v | fromIntegral (round v :: Int) /= v]
+    go (Fun _ t)     = go t
+    go (Pow t _)     = go t
     go (Add l r)     = go l <> go r
     go (Sub l r)     = go l <> go r
     go (Mul l r)     = go l <> go r
@@ -84,7 +98,9 @@ constToParam tree = go tree `evalState` 0
     go Empty         = pure Empty
     go (Var ix)      = pure $ Var ix
     go (Param ix)    = pure $ Param ix
-    go (Const v)     = if fromIntegral (round v) == v then pure (Const v) else do { ix <- get; modify (+1); pure (Param ix) }
+    go (Const v)     = if fromIntegral (round v :: Int) == v
+                         then pure (Const v)
+                         else do { ix <- get; modify (+1); pure (Param ix) }
     go (Fun f t)     = Fun f <$> go t
     go (Pow t i)     = (`Pow` i) <$> go t
     go (Add l r)     = do { l' <- go l; r' <- go r; pure $ Add l' r' }
@@ -95,7 +111,7 @@ constToParam tree = go tree `evalState` 0
     go (LogBase l r) = do { l' <- go l; r' <- go r; pure $ LogBase l' r' }
 
 paramToVar :: SRTree Int a -> SRTree Int a
-paramToVar tree = go tree
+paramToVar = go
   where
     go :: SRTree Int a -> SRTree Int a
     go Empty         = Empty
@@ -144,6 +160,7 @@ leastSquares niter tree xss ys t0
     derive             = flip deriveBy
     evalSRTree t theta = fromJust $ evalTree t `runReader` (Just . LA.scalar . (theta LA.!))
     model              = subtract ys . evalSRTree tree'
+
     jacob t | sz == (1,1) = LA.asColumn $ LA.konst (head $ LA.toList $ head j) m
             | otherwise   = LA.fromColumns j
             where

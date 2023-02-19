@@ -1,26 +1,29 @@
 {-# language LambdaCase #-}
+{-# language ImportQualifiedPost #-}
 module Main (main) where
 
-import Data.SRTree.Opt
+import Control.Monad ( unless, forM_ )
+import Data.Bifunctor (first)
+import Data.ByteString.Char8 qualified as B
+import Data.Char (toLower, toUpper)
+import Data.List (intercalate)
+import Data.SRTree ( SRTree )
+import Data.SRTree.EqSat (simplifyEqSat)
+import Data.SRTree.Opt (Column, Columns, loadDataset, optimize, splitTrainVal, sse)
+import Data.SRTree.Print qualified as P
 import Options.Applicative
-import Data.Bifunctor ( first )
-import Data.Char ( toLower, toUpper )
-import Text.Read ( readMaybe )
-import Data.List ( intercalate )
-import Text.ParseSR ( SRAlgs(..), Output(..) )
-import Text.ParseSR.IO ( withInput, withOutput )
-import qualified Data.ByteString.Char8 as B
-import Data.SRTree
-import qualified Data.SRTree.Print as P
-import System.IO 
-import Control.Monad
-import Data.SRTree.EqSat
+import System.IO ( hClose, hPutStrLn, openFile, stderr, stdout, IOMode(WriteMode), Handle )
+import Text.ParseSR (SRAlgs (..))
+import Text.ParseSR.IO (withInput)
+import Text.Read (readMaybe)
 
 envelope :: a -> [a] -> [a]
 envelope c xs = c : xs <> [c]
+{-# INLINE envelope #-}
 
 sralgsHelp :: [String]
 sralgsHelp = map (envelope '\'' . map toLower . show) [toEnum 0 :: SRAlgs ..]
+{-# INLINE sralgsHelp #-}
 
 sralgsReader :: ReadM SRAlgs
 sralgsReader = do
@@ -31,9 +34,9 @@ sralgsReader = do
 
 columnsReader :: ReadM [Int]
 columnsReader = do
-  cols <- ('[':) . (<> "]") <$> str
-  eitherReader $ case readMaybe cols of
-    Nothing -> pure . Left $ "wrong format " <> cols
+  colsStr <- ('[':) . (<> "]") <$> str
+  eitherReader $ case readMaybe colsStr of
+    Nothing -> pure . Left $ "wrong format " <> colsStr
     Just x  -> pure . Right $ x
 
 data Args = Args
@@ -60,28 +63,28 @@ opt = Args
    <*> strOption
        ( long "input"
        <> short 'i'
-       <> metavar "INPUT"
+       <> metavar "INPUT-FILE"
        <> showDefault
        <> value ""
        <> help "Input file containing expressions. Empty string gets expression from stdin." )
    <*> strOption
        ( long "output"
        <> short 'o'
-       <> metavar "OUTPUT"
+       <> metavar "OUTPUT-FILE"
        <> showDefault
        <> value ""
        <> help "Output file to store expressions. Empty string prints expressions to stdout." )
    <*> strOption
        ( long "stats"
        <> short 's'
-       <> metavar "STATS"
+       <> metavar "STATS-FILE"
        <> showDefault
        <> value ""
        <> help "Output file to store the sse of the trees. Empty string prints expressions to stderr." )
    <*> strOption
        ( long "dataset"
        <> short 'd'
-       <> metavar "DATASET"
+       <> metavar "DATASET-FILENAME"
        <> help "Filename of the dataset used for optimizing the parameters." )
    <*> option auto
        ( long "rows"
@@ -121,10 +124,17 @@ openData :: Args -> IO (((Columns, Column), (Columns, Column)), [(B.ByteString, 
 openData args = first (splitTrainVal (trainRows args)) 
              <$> loadDataset (dataset args  ) (cols args) (target args) (hasHeader args)
 
+openWriteWithDefault :: Handle -> String -> IO Handle
+openWriteWithDefault dflt fname = 
+    if null fname 
+       then pure dflt 
+       else openFile fname WriteMode
+{-# INLINE openWriteWithDefault #-}
+
 printResults :: String -> String -> (SRTree Int Double -> (SRTree Int Double, String)) -> [Either String (SRTree Int Double)] -> IO ()
 printResults fname sname f exprs = do
-  hExpr <- if null fname then pure stdout else openFile fname WriteMode
-  hStat <- if null fname then pure stderr else openFile sname WriteMode
+  hExpr <- openWriteWithDefault stdout fname
+  hStat <- openWriteWithDefault stderr sname
   hPutStrLn hStat "SSE_train_orig,SSE_val_orig,SSE_train_opt,SSE_val_opt"
   forM_ exprs $ \case 
                    Left  err -> do hPutStrLn hExpr $ "invalid expression: " <> err
@@ -143,7 +153,7 @@ main = do
       varnames  = intercalate "," (map (B.unpack.fst) headers)
       sseTr     = show . sse xTr yTr
       sseVal    = show . sse xVal yVal
-      genStats  tree = let tree' = if (simpl args) then simplifyEqSat tree else tree
+      genStats  tree = let tree' = if simpl args then simplifyEqSat tree else tree
                            t = optimizer tree'
                         in (t, intercalate "," [sseTr tree', sseVal tree', sseTr t, sseVal t])
   withInput (infile args) (from args) varnames False
