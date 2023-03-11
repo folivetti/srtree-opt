@@ -51,6 +51,7 @@ data Args = Args
       , niter       :: Int
       , hasHeader   :: Bool
       , simpl       :: Bool
+      , gz          :: Bool
     } deriving Show
 
 opt :: Parser Args
@@ -119,10 +120,13 @@ opt = Args
     <*> switch
         ( long "simplify"
         <> help "Apply basic simplification." )
+    <*> switch
+        ( long "gz"
+        <> help "Read gzipped files." )
 
 openData :: Args -> IO (((Columns, Column), (Columns, Column)), [(B.ByteString, Int)])
 openData args = first (splitTrainVal (trainRows args)) 
-             <$> loadDataset (dataset args  ) (cols args) (target args) (hasHeader args)
+             <$> loadDataset (dataset args  ) (cols args) (target args) (hasHeader args) (gz args)
 
 openWriteWithDefault :: Handle -> String -> IO Handle
 openWriteWithDefault dflt fname = 
@@ -156,7 +160,7 @@ main = do
       genStats  tree = let tree' = if simpl args then simplifyEqSat tree else tree
                            t = optimizer tree'
                         in (t, intercalate "," [sseTr tree', sseVal tree', sseTr t, sseVal t])
-  withInput (infile args) (from args) varnames False
+  withInput (infile args) (from args) varnames False False
     >>= printResults (outfile args) (stats args) genStats
   
   where 

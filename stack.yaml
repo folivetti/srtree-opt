@@ -43,10 +43,11 @@ packages:
 # extra-deps: []
 extra-deps:                                                                                                   
   - srtree-0.1.2.1
-  - pandoc-symreg-0.1.0.1
+  - git: https://github.com/folivetti/pandoc-symreg.git
+    commit: c2578183c30fc39741454adc0b9b20acd77efcdc
   - hegg-0.3.0.0
   - git: https://github.com/folivetti/srtree-eqsat.git                                                          
-    commit: e22efe20860f87c8202efd57d3b1682ecd4b6cb3
+    commit: 7a80c76305f940673a6e6490e0e3a7a3db3a8648
      
 # Override default flag values for local packages and extra-deps
 # flags: {}

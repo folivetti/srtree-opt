@@ -9,14 +9,14 @@ import Control.Arrow ((&&&))
 import Control.Monad.Reader (runReader)
 import Control.Monad.State (MonadState (get), State, evalState, gets, modify)
 import Data.ByteString.Char8 qualified as B
+import Data.ByteString.Lazy qualified as BS
 import Data.List (sortOn)
-import Data.List.Split (splitOn)
 import Data.Maybe (fromJust)
 import Data.SRTree (OptIntPow (..), SRTree (..), deriveBy, evalTree, evalTreeMap)
 import Data.Vector qualified as V
 import Numeric.GSL.Fitting (FittingMethod (..), nlFitting)
 import Numeric.LinearAlgebra qualified as LA
-
+import Codec.Compression.GZip
 type Columns = V.Vector Column
 type Column  = LA.Vector Double
 
@@ -24,17 +24,18 @@ byteshow :: Int -> B.ByteString
 byteshow = B.pack . show
 {-# INLINE byteshow #-}
 
-loadMtx :: [[String]] -> LA.Matrix Double
-loadMtx = LA.fromLists . map (map read)
+loadMtx :: [[B.ByteString]] -> LA.Matrix Double
+loadMtx = LA.fromLists . map (map (read . B.unpack))
 {-# INLINE loadMtx #-}
 
 toColumns :: [Int] -> LA.Matrix Double -> [LA.Vector Double]
 toColumns ixs = LA.toColumns . (LA.¿ ixs)
 {-# INLINE toColumns #-}
 
-loadDataset :: String -> [Int] -> Int -> Bool -> IO ((Columns, Column), [(B.ByteString, Int)])
-loadDataset filename columns target hasHeader = do
-  content <- map (splitOn ",") . lines <$> readFile filename
+loadDataset :: String -> [Int] -> Int -> Bool -> Bool -> IO ((Columns, Column), [(B.ByteString, Int)])
+loadDataset filename columns target hasHeader gzipped = do
+  let appGz = if gzipped then decompress else id
+  content <- filter (not.null) . map (B.split ',') . B.split '\n' . B.pack . map (toEnum . fromEnum) . BS.unpack . appGz <$> BS.readFile filename
   let
     datum     =  loadMtx $ (if hasHeader then tail else id) content
     (_, n)    = LA.size datum
@@ -42,7 +43,7 @@ loadDataset filename columns target hasHeader = do
     target'   = if target < 0 then [n - 1] else [target]
     (xss, ys) = (V.fromList . toColumns columns' &&& head . toColumns target' ) datum
     header    = if hasHeader
-                  then sortOn snd $ zip (map B.pack $ head content) columns'
+                  then sortOn snd $ zip (head content) columns'
                   else map (("x" <>) . byteshow &&& id) [0 .. length columns' - 1]
   pure ((xss, ys), header)
 
