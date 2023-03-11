@@ -2,7 +2,7 @@
 {-# language OverloadedStrings #-}
 {-# language ImportQualifiedPost #-}
 module Data.SRTree.Opt
-    ( loadDataset, optimize, splitTrainVal, sse, mse, rmse, Column, Columns, constToParam, varToConst, paramToVar )
+    ( loadDataset, optimize, splitTrainVal, sse, mse, rmse, Column, Columns, constToParam, varToConst, paramToVar, getTheta )
     where
 
 import Control.Arrow ((&&&))
