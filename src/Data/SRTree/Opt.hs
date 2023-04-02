@@ -10,7 +10,7 @@ import Control.Monad.Reader (runReader)
 import Control.Monad.State (MonadState (get), State, evalState, gets, modify)
 import Data.ByteString.Char8 qualified as B
 import Data.ByteString.Lazy qualified as BS
-import Data.List (sortOn)
+import Data.List (sortOn, isInfixOf)
 import Data.Maybe (fromJust)
 import Data.SRTree (OptIntPow (..), SRTree (..), deriveBy, evalTree, evalTreeMap)
 import Data.Vector qualified as V
@@ -32,10 +32,23 @@ toColumns :: [Int] -> LA.Matrix Double -> [LA.Vector Double]
 toColumns ixs = LA.toColumns . (LA.¿ ixs)
 {-# INLINE toColumns #-}
 
-loadDataset :: String -> [Int] -> Int -> Bool -> Bool -> IO ((Columns, Column), [(B.ByteString, Int)])
-loadDataset filename columns target hasHeader gzipped = do
-  let appGz = if gzipped then decompress else id
-  content <- filter (not.null) . map (B.split ',') . B.split '\n' . B.pack . map (toEnum . fromEnum) . BS.unpack . appGz <$> BS.readFile filename
+isGZip :: String -> Bool
+isGZip [ ]    = False
+isGZip [_]    = False
+isGZip "gz"   = True
+isGZip [_, _] = False
+isGZip (_:xs) = isGZip xs
+{-# INLINE isGZip #-}
+
+loadDataset :: String -> [Int] -> Int -> Bool -> IO ((Columns, Column), [(B.ByteString, Int)])
+loadDataset filename columns target hasHeader = do
+  let 
+    appGz = if isGZip filename then decompress else id
+    separator 
+      | "csv" `isInfixOf` filename = ','
+      | "tsv" `isInfixOf` filename = '\t'
+      | otherwise                  = error "unsupported format"
+  content <- filter (not.null) . map (B.split separator) . B.split '\n' . B.pack . map (toEnum . fromEnum) . BS.unpack . appGz <$> BS.readFile filename
   let
     datum     =  loadMtx $ (if hasHeader then tail else id) content
     (_, n)    = LA.size datum

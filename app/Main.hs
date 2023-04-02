@@ -51,7 +51,6 @@ data Args = Args
       , niter       :: Int
       , hasHeader   :: Bool
       , simpl       :: Bool
-      , gz          :: Bool
     } deriving Show
 
 opt :: Parser Args
@@ -120,13 +119,10 @@ opt = Args
     <*> switch
         ( long "simplify"
         <> help "Apply basic simplification." )
-    <*> switch
-        ( long "gz"
-        <> help "Read gzipped files." )
 
 openData :: Args -> IO (((Columns, Column), (Columns, Column)), [(B.ByteString, Int)])
 openData args = first (splitTrainVal (trainRows args)) 
-             <$> loadDataset (dataset args  ) (cols args) (target args) (hasHeader args) (gz args)
+             <$> loadDataset (dataset args  ) (cols args) (target args) (hasHeader args)
 
 openWriteWithDefault :: Handle -> String -> IO Handle
 openWriteWithDefault dflt fname = 
