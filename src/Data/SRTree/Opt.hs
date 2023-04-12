@@ -165,8 +165,9 @@ optimize niter xss ys tree = let t0    = getTheta tree
 
 leastSquares :: Int -> SRTree Int Double -> Columns -> Column -> Column -> Column
 leastSquares niter tree xss ys t0
-  | LA.size t0 == 0 = t0
-  | otherwise       = fst $ nlFitting LevenbergMarquardt 1e-6 1e-6 niter model jacob t0
+  | n == 0    = t0
+  | n > m     = t0
+  | otherwise = fst $ nlFitting LevenbergMarquardtScaled 1e-6 1e-6 niter model jacob t0
   where
     n                  = LA.size t0
     m                  = LA.size ys
