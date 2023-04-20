@@ -40,6 +40,17 @@ packages:
   original:
     commit: 756e097f76778216d4289913e850811b4b7b8a62
     git: https://github.com/folivetti/srtree-eqsat.git
+- completed:
+    commit: a0c09b3c339471b086518c774dee4a00be37649b
+    git: https://github.com/folivetti/srtree-datasets.git
+    name: srtree-datasets
+    pantry-tree:
+      sha256: df566b7b39b96fb1833b8769dad85fa02c352f624de851470a05626e2f147303
+      size: 691
+    version: 0.1.0.0
+  original:
+    commit: a0c09b3c339471b086518c774dee4a00be37649b
+    git: https://github.com/folivetti/srtree-datasets.git
 snapshots:
 - completed:
     sha256: adbc602422dde10cc330175da7de8609e70afc41449a7e2d6e8b1827aa0e5008

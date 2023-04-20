@@ -33,6 +33,7 @@ dependencies:
 - split
 - zlib
 - srtree-eqsat
+- srtree-datasets
 
 ghc-options:
 - -Wall

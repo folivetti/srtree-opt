@@ -3,14 +3,13 @@
 module Main (main) where
 
 import Control.Monad ( unless, forM_ )
-import Data.Bifunctor (first)
-import Data.ByteString.Char8 qualified as B
 import Data.Char (toLower, toUpper)
 import Data.List (intercalate)
 import Data.SRTree ( SRTree )
 import Data.SRTree.EqSat (simplifyEqSat)
-import Data.SRTree.Opt (Column, Columns, loadDataset, optimize, splitTrainVal, sse)
+import Data.SRTree.Opt (optimize, sse)
 import Data.SRTree.Print qualified as P
+import Data.SRTree.Datasets (loadDataset)
 import Options.Applicative
 import System.IO ( hClose, hPutStrLn, openFile, stderr, stdout, IOMode(WriteMode), Handle )
 import Text.ParseSR (SRAlgs (..))
@@ -45,9 +44,6 @@ data Args = Args
       , outfile     :: String
       , stats       :: String
       , dataset     :: String
-      , trainRows   :: Int
-      , cols        :: [Int]
-      , target      :: Int
       , niter       :: Int
       , hasHeader   :: Bool
       , simpl       :: Bool
@@ -85,28 +81,7 @@ opt = Args
        ( long "dataset"
        <> short 'd'
        <> metavar "DATASET-FILENAME"
-       <> help "Filename of the dataset used for optimizing the parameters." )
-   <*> option auto
-       ( long "rows"
-       <> short 'r'
-       <> metavar "ROWS"
-       <> showDefault
-       <> value 0
-       <> help "Number of rows to use as training data, the remainder will be used as validation. Values <= 0 will use the whole data as training and validation.")
-   <*> option columnsReader
-       ( long "columns"
-       <> short 'c'
-       <> metavar "COLUMNS"
-       <> showDefault
-       <> value []
-       <> help "Index of columns to use as variables. Default \"\" uses all but the last column.")
-   <*> option auto
-       ( long "target"
-       <> short 't'
-       <> metavar "TARGET"
-       <> showDefault
-       <> value (-1)
-       <> help "Index of colum to use as the target variable. Default (-1) uses the last column.")
+       <> help "Filename of the dataset used for optimizing the parameters. Empty string omits stats that make use of the training data. It will auto-detect and handle gzipped file based on gz extension. It will also auto-detect the delimiter. \nThe filename can include extra information: filename.csv:start:end:target:vars where start and end corresponds to the range of rows that should be used for fitting, target is the column index (or name) of the target variable and cols is a comma separated list of column indeces or names of the variables in the same order as used by the symbolic model." )
    <*> option auto
        ( long "niter"
        <> metavar "NITER"
@@ -119,10 +94,6 @@ opt = Args
     <*> switch
         ( long "simplify"
         <> help "Apply basic simplification." )
-
-openData :: Args -> IO (((Columns, Column), (Columns, Column)), [(B.ByteString, Int)])
-openData args = first (splitTrainVal (trainRows args)) 
-             <$> loadDataset (dataset args  ) (cols args) (target args) (hasHeader args)
 
 openWriteWithDefault :: Handle -> String -> IO Handle
 openWriteWithDefault dflt fname = 
@@ -148,9 +119,8 @@ printResults fname sname f exprs = do
 main :: IO ()
 main = do
   args <- execParser opts
-  (((xTr, yTr),(xVal, yVal)), headers) <- openData args
+  ((xTr, yTr, xVal, yVal), varnames) <- loadDataset (dataset args) (hasHeader args)
   let optimizer = optimize (niter args) xTr yTr
-      varnames  = intercalate "," (map (B.unpack.fst) headers)
       sseTr     = show . sse xTr yTr
       sseVal    = show . sse xVal yVal
       genStats  tree = let tree' = if simpl args then simplifyEqSat tree else tree
