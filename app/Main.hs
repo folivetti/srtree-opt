@@ -6,7 +6,7 @@ import Control.Monad ( unless, forM_ )
 import Data.Char (toLower, toUpper)
 import Data.List (intercalate)
 import Data.SRTree ( SRTree )
-import Data.SRTree.EqSat (simplifyEqSat)
+import Data.SRTree.Recursion ( Fix )
 import Data.SRTree.Opt (optimize, sse)
 import Data.SRTree.Print qualified as P
 import Data.SRTree.Datasets (loadDataset)
@@ -102,7 +102,7 @@ openWriteWithDefault dflt fname =
        else openFile fname WriteMode
 {-# INLINE openWriteWithDefault #-}
 
-printResults :: String -> String -> (SRTree Int Double -> (SRTree Int Double, String)) -> [Either String (SRTree Int Double)] -> IO ()
+printResults :: String -> String -> (Fix SRTree -> (Fix SRTree, String)) -> [Either String (Fix SRTree)] -> IO ()
 printResults fname sname f exprs = do
   hExpr <- openWriteWithDefault stdout fname
   hStat <- openWriteWithDefault stderr sname
@@ -111,7 +111,7 @@ printResults fname sname f exprs = do
                    Left  err -> do hPutStrLn hExpr $ "invalid expression: " <> err
                                    hPutStrLn hStat $ "invalid expression: " <> err
                    Right ex  -> do let (ex', sts) = f ex
-                                   hPutStrLn hExpr (P.showDefault ex')
+                                   hPutStrLn hExpr (P.showExpr ex')
                                    hPutStrLn hStat sts
   unless (null fname) $ hClose hExpr
   unless (null sname) $ hClose hStat
@@ -121,12 +121,11 @@ main = do
   args <- execParser opts
   ((xTr, yTr, xVal, yVal), varnames) <- loadDataset (dataset args) (hasHeader args)
   let optimizer = optimize (niter args) xTr yTr
-      sseTr     = show . sse xTr yTr
-      sseVal    = show . sse xVal yVal
-      genStats  tree = let tree' = if simpl args then simplifyEqSat tree else tree
-                           t = optimizer tree'
-                        in (t, intercalate "," [sseTr tree', sseVal tree', sseTr t, sseVal t])
-  withInput (infile args) (from args) varnames False False
+      sseTr t    = show . sse xTr yTr t
+      sseVal t   = show . sse xVal yVal t
+      genStats  tree = let (t, theta) = optimizer tree
+                        in (t, intercalate "," [sseTr theta tree, sseVal theta tree, sseTr theta t, sseVal theta t])
+  withInput (infile args) (from args) varnames False (simpl args)
     >>= printResults (outfile args) (stats args) genStats
   
   where 
