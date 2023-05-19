@@ -8,6 +8,7 @@ import Data.List (intercalate)
 import Data.SRTree ( SRTree )
 import Data.SRTree.Recursion ( Fix )
 import Data.SRTree.Opt (optimize, sse)
+import Data.SRTree.Likelihoods
 import Data.SRTree.Print qualified as P
 import Data.SRTree.Datasets (loadDataset)
 import Options.Applicative
@@ -24,6 +25,10 @@ sralgsHelp :: [String]
 sralgsHelp = map (envelope '\'' . map toLower . show) [toEnum 0 :: SRAlgs ..]
 {-# INLINE sralgsHelp #-}
 
+distHelp :: [String]
+distHelp = map (envelope '\'' . map toLower . show) [toEnum 0 :: Distribution ..]
+{-# INLINE distHelp #-}
+
 sralgsReader :: ReadM SRAlgs
 sralgsReader = do
   sr <- map toUpper <$> str
@@ -31,12 +36,21 @@ sralgsReader = do
     Nothing -> pure . Left $ "unknown algorithm. Available options are " <> intercalate "," sralgsHelp
     Just x  -> pure . Right $ x
 
-columnsReader :: ReadM [Int]
-columnsReader = do
-  colsStr <- ('[':) . (<> "]") <$> str
-  eitherReader $ case readMaybe colsStr of
-    Nothing -> pure . Left $ "wrong format " <> colsStr
-    Just x  -> pure . Right $ x
+s2Reader = do
+  s <- str
+  eitherReader $ case readMaybe s of
+    Nothing -> pure . Left $ "wrong format " <> s
+    mx      -> pure . Right $ mx
+
+distRead :: ReadM (Maybe Distribution)
+distRead = do
+  d <- capitalize <$> str
+  eitherReader $ case readMaybe d of
+                    Nothing -> pure . Left $ "unsupported distribution " <> d
+                    Just x  -> pure . Right $ Just x
+  where
+    capitalize ""     = ""
+    capitalize (c:cs) = toUpper c : map toLower cs
 
 data Args = Args
     {   from        :: SRAlgs
@@ -47,6 +61,8 @@ data Args = Args
       , niter       :: Int
       , hasHeader   :: Bool
       , simpl       :: Bool
+      , dist        :: Maybe Distribution
+      , msErr       :: Maybe Double
     } deriving Show
 
 opt :: Parser Args
@@ -91,9 +107,22 @@ opt = Args
    <*> switch
        ( long "hasheader"
        <> help "Uses the first row of the csv file as header.")
-    <*> switch
+   <*> switch
         ( long "simplify"
         <> help "Apply basic simplification." )
+   <*> option distRead
+        ( long "distribution"
+        <> metavar ("[" <> intercalate "|" distHelp <> "]")
+        <> showDefault
+        <> value Nothing
+        <> help "Minimize negative log-likelihood following one of the avaliable distributions. The default will use least squares to optimize the model."
+        )
+   <*> option s2Reader
+       ( long "sErr"
+       <> metavar "Serr"
+       <> showDefault
+       <> value Nothing
+       <> help "Estimated standard error of the data. If not passed, it uses the model MSE.")
 
 openWriteWithDefault :: Handle -> String -> IO Handle
 openWriteWithDefault dflt fname = 
@@ -120,11 +149,11 @@ main :: IO ()
 main = do
   args <- execParser opts
   ((xTr, yTr, xVal, yVal), varnames) <- loadDataset (dataset args) (hasHeader args)
-  let optimizer = optimize (niter args) xTr yTr
+  let optimizer = optimize (dist args) (msErr args) (niter args) xTr yTr
       sseTr t    = show . sse xTr yTr t
       sseVal t   = show . sse xVal yVal t
-      genStats  tree = let (t, theta) = optimizer tree
-                        in (t, intercalate "," [sseTr theta tree, sseVal theta tree, sseTr theta t, sseVal theta t])
+      genStats  tree = let solution = optimizer tree
+                        in (fst solution, intercalate "," $ map (`uncurry` solution) [sseTr, sseVal, sseTr, sseVal])
   withInput (infile args) (from args) varnames False (simpl args)
     >>= printResults (outfile args) (stats args) genStats
   
