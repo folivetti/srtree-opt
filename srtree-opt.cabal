@@ -25,6 +25,7 @@ source-repository head
 
 library
   exposed-modules:
+      Data.SRTree.Likelihoods
       Data.SRTree.Opt
   other-modules:
       Paths_srtree_opt
