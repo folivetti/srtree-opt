@@ -5,10 +5,9 @@ module Main (main) where
 import Control.Monad ( unless, forM_ )
 import Data.Char (toLower, toUpper)
 import Data.List (intercalate)
-import Data.SRTree ( SRTree )
+import Data.SRTree ( SRTree, floatConstsToParam )
 import Data.SRTree.Recursion ( Fix )
-import Data.SRTree.Opt (optimize, sse)
-import Data.SRTree.Likelihoods
+import Data.SRTree.Opt (optimize, sse, Distribution (..), nll)
 import Data.SRTree.Print qualified as P
 import Data.SRTree.Datasets (loadDataset)
 import Options.Applicative
@@ -16,6 +15,7 @@ import System.IO ( hClose, hPutStrLn, openFile, stderr, stdout, IOMode(WriteMode
 import Text.ParseSR (SRAlgs (..))
 import Text.ParseSR.IO (withInput)
 import Text.Read (readMaybe)
+import Data.Vector qualified as V
 
 envelope :: a -> [a] -> [a]
 envelope c xs = c : xs <> [c]
@@ -36,6 +36,7 @@ sralgsReader = do
     Nothing -> pure . Left $ "unknown algorithm. Available options are " <> intercalate "," sralgsHelp
     Just x  -> pure . Right $ x
 
+s2Reader :: ReadM (Maybe Double)
 s2Reader = do
   s <- str
   eitherReader $ case readMaybe s of
@@ -125,9 +126,9 @@ opt = Args
        <> help "Estimated standard error of the data. If not passed, it uses the model MSE.")
 
 openWriteWithDefault :: Handle -> String -> IO Handle
-openWriteWithDefault dflt fname = 
-    if null fname 
-       then pure dflt 
+openWriteWithDefault dflt fname =
+    if null fname
+       then pure dflt
        else openFile fname WriteMode
 {-# INLINE openWriteWithDefault #-}
 
@@ -136,7 +137,7 @@ printResults fname sname f exprs = do
   hExpr <- openWriteWithDefault stdout fname
   hStat <- openWriteWithDefault stderr sname
   hPutStrLn hStat "SSE_train_orig,SSE_val_orig,SSE_train_opt,SSE_val_opt"
-  forM_ exprs $ \case 
+  forM_ exprs $ \case
                    Left  err -> do hPutStrLn hExpr $ "invalid expression: " <> err
                                    hPutStrLn hStat $ "invalid expression: " <> err
                    Right ex  -> do let (ex', sts) = f ex
@@ -150,14 +151,18 @@ main = do
   args <- execParser opts
   ((xTr, yTr, xVal, yVal), varnames) <- loadDataset (dataset args) (hasHeader args)
   let optimizer = optimize (dist args) (msErr args) (niter args) xTr yTr
-      sseTr t    = show . sse xTr yTr t
-      sseVal t   = show . sse xVal yVal t
-      genStats  tree = let solution = optimizer tree
-                        in (fst solution, intercalate "," $ map (`uncurry` solution) [sseTr, sseVal, sseTr, sseVal])
+      errorFun  = case dist args of
+                    Nothing -> sse
+                    Just d  -> nll d (msErr args)
+      eTr t    = show . errorFun xTr yTr t
+      eVal t   = show . errorFun xVal yVal t
+      genStats  tree = let (tOpt, thetaOpt) = optimizer tree
+                           theta            = V.fromList . snd . floatConstsToParam $ tree
+                        in (tOpt, intercalate "," [eTr tOpt theta, eVal tOpt theta, eTr tOpt thetaOpt, eVal tOpt thetaOpt])
   withInput (infile args) (from args) varnames False (simpl args)
     >>= printResults (outfile args) (stats args) genStats
-  
-  where 
+
+  where
       opts = info (opt <**> helper)
             ( fullDesc <> progDesc "Optimize the parameters of Symbolic Regression expressions."
             <> header "srtree-opt - a CLI tool to (re)optimize the numeric parameters of symbolic regression expressions"

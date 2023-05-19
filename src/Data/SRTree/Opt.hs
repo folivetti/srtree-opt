@@ -3,11 +3,11 @@
 {-# language ImportQualifiedPost #-}
 {-# language ViewPatterns #-}
 module Data.SRTree.Opt
-    ( optimize, sse, mse, rmse, Column, Columns )
+    ( optimize, sse, mse, rmse, Column, Columns, minimizeGaussian, minimizeBinomial, nll, Distribution (..) )
     where
 
 import Data.SRTree (SRTree (..), gradParams, floatConstsToParam, gradParams, evalTree)
-import Data.SRTree.Recursion (Fix(..), cata)
+import Data.SRTree.Recursion (Fix(..))
 import Data.Vector qualified as V
 import Numeric.GSL.Fitting (FittingMethod (..), nlFitting)
 import Numeric.GSL.Minimization (MinimizeMethodD (..), minimizeVD)
@@ -48,5 +48,8 @@ minimizeNLL dist msErr niter xss ys tree t0
     model = nll dist msErr xss ys tree . V.fromList . LA.toList
     jacob = gradNLL dist msErr xss ys tree . V.fromList . LA.toList
 
+minimizeGaussian :: Int -> Columns -> Column -> Fix SRTree -> V.Vector Double -> V.Vector Double
 minimizeGaussian = minimizeNLL Gaussian Nothing
-minimizeBinomial = minimizeNLL Binomial Nothing
+
+minimizeBinomial :: Int -> Columns -> Column -> Fix SRTree -> V.Vector Double -> V.Vector Double
+minimizeBinomial = minimizeNLL Bernoulli Nothing
