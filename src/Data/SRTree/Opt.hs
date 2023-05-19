@@ -18,6 +18,7 @@ import Data.Vector qualified as V
 import Numeric.GSL.Fitting (FittingMethod (..), nlFitting)
 import Numeric.LinearAlgebra qualified as LA
 import Codec.Compression.GZip
+
 type Columns = V.Vector Column
 type Column  = LA.Vector Double
 
