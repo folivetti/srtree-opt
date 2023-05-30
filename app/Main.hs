@@ -5,8 +5,7 @@ module Main (main) where
 import Control.Monad ( unless, forM_ )
 import Data.Char (toLower, toUpper)
 import Data.List (intercalate)
-import Data.SRTree ( SRTree, floatConstsToParam )
-import Data.SRTree.Recursion ( Fix )
+import Data.SRTree ( SRTree, Fix (..), floatConstsToParam, paramsToConst )
 import Data.SRTree.Opt (optimize, sse, Distribution (..), nll)
 import Data.SRTree.Print qualified as P
 import Data.SRTree.Datasets (loadDataset)
@@ -158,7 +157,7 @@ main = do
       eVal t   = show . errorFun xVal yVal t
       genStats  tree = let (tOpt, thetaOpt) = optimizer tree
                            theta            = V.fromList . snd . floatConstsToParam $ tree
-                        in (tOpt, intercalate "," [eTr tOpt theta, eVal tOpt theta, eTr tOpt thetaOpt, eVal tOpt thetaOpt])
+                        in (paramsToConst (V.toList thetaOpt) tOpt, intercalate "," [eTr tOpt theta, eVal tOpt theta, eTr tOpt thetaOpt, eVal tOpt thetaOpt])
   withInput (infile args) (from args) varnames False (simpl args)
     >>= printResults (outfile args) (stats args) genStats
 

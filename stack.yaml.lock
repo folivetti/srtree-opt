@@ -5,20 +5,6 @@
 
 packages:
 - completed:
-    hackage: srtree-1.0.0.1@sha256:bc27302c066bfce547a9279314349b9dadb5c3229109ed35cbdc13610fe40722,2113
-    pantry-tree:
-      sha256: 63845788ce5e88eb7b6b33b719050d42a896ede5794a9ab4b85de56bcbee2d3a
-      size: 684
-  original:
-    hackage: srtree-1.0.0.1
-- completed:
-    hackage: pandoc-symreg-0.2.0.0@sha256:ba441b9f5b4eedfac5c393446ef614a54133b3fb50e39060ab37e4204ba5f8b9,2779
-    pantry-tree:
-      sha256: 286dc4ce172dde5737bc23de8207a99e58daeea1296aa6ba10d359e7ebf1cc7b
-      size: 486
-  original:
-    hackage: pandoc-symreg-0.2.0.0
-- completed:
     hackage: hegg-0.3.0.0@sha256:913a91c7326a767626d6bc949ea38af857cc6dee22b3e49270f7342e2b2bf762,5718
     pantry-tree:
       sha256: 14f9d1f8409bdbf66deaac5a7e38792ed55a56bbbcbb175bd3fa9dd334b754e4
@@ -36,10 +22,34 @@ packages:
   original:
     commit: a0c09b3c339471b086518c774dee4a00be37649b
     git: https://github.com/folivetti/srtree-datasets.git
+- completed:
+    hackage: pandoc-symreg-0.2.1.0@sha256:42ef6138882076e15c66901c31a539efb1179dc29728712f40acc27335a12961,2836
+    pantry-tree:
+      sha256: 69f2d6250f29edc577cf100d9018337ae950121209d71b1ece1c7170ea152e95
+      size: 486
+  original:
+    hackage: pandoc-symreg-0.2.1.0
+- completed:
+    hackage: srtree-1.0.0.2@sha256:071b351b8ca1d970ee74ce9e7a8f7496a122b47c34e99484703c97a279ad7a93,2173
+    pantry-tree:
+      sha256: 1fa7ed5b8666a2ac6e1b78a52b588da50a52fb5007293148c9037b9de592c6c5
+      size: 684
+  original:
+    hackage: srtree-1.0.0.2
+- completed:
+    commit: 582c9c4f567e64f543380c74a0f45a4722cfa13a
+    git: https://github.com/folivetti/srtree-eqsat
+    name: srtree-eqsat
+    pantry-tree:
+      sha256: a15817367d9699a5a2f273587a3979552c26949b0dfb441714bf7c3c1cd40da4
+      size: 867
+    version: 0.2.0.0
+  original:
+    commit: 582c9c4f567e64f543380c74a0f45a4722cfa13a
+    git: https://github.com/folivetti/srtree-eqsat
 snapshots:
 - completed:
-    sha256: adbc602422dde10cc330175da7de8609e70afc41449a7e2d6e8b1827aa0e5008
-    size: 649342
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/20/11.yaml
-  original:
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/20/11.yaml
+    sha256: dcf4fc28f12d805480ddbe8eb8c370e11db12f0461d0110a4240af27ac88d725
+    size: 650255
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/20/22.yaml
+  original: lts-20.22

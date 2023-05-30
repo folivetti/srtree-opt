@@ -6,7 +6,7 @@ module Data.SRTree.Opt
     ( optimize, sse, mse, rmse, Column, Columns, minimizeGaussian, minimizeBinomial, nll, Distribution (..) )
     where
 
-import Data.SRTree (SRTree (..), gradParams, floatConstsToParam, gradParams, evalTree)
+import Data.SRTree (SRTree (..), gradParamsRev, floatConstsToParam, evalTree)
 import Data.SRTree.Recursion (Fix(..))
 import Data.Vector qualified as V
 import Numeric.GSL.Fitting (FittingMethod (..), nlFitting)
@@ -34,13 +34,13 @@ leastSquares niter xss ys tree t0
     model theta = let theta' = V.fromList (LA.toList theta)
                    in subtract ys $ evalTree xss theta' LA.scalar tree
     jacob theta = let theta' = V.fromList (LA.toList theta) 
-                   in LA.fromColumns . snd $ gradParams xss theta' LA.scalar tree
+                   in LA.fromColumns . snd $ gradParamsRev xss theta' LA.scalar tree
 
 minimizeNLL :: Distribution -> Maybe Double -> Int -> Columns -> Column -> Fix SRTree -> V.Vector Double -> V.Vector Double
 minimizeNLL dist msErr niter xss ys tree t0
   | n == 0    = t0
   | n > m     = t0
-  | otherwise = V.fromList . LA.toList . fst $ minimizeVD VectorBFGS2 1e-6 niter 1e-2 1e-6 model jacob t0'
+  | otherwise = V.fromList . LA.toList . fst $ minimizeVD VectorBFGS2 1e-6 niter 1e-1 1e-6 model jacob t0'
   where
     t0'   = LA.fromList $ V.toList t0
     n     = LA.size t0'

@@ -17,8 +17,7 @@
 #
 # resolver: ./custom-snapshot.yaml
 # resolver: https://example.com/snapshots/2018-01-01.yaml
-resolver:
-  url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/20/11.yaml
+resolver: lts-20.22
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -42,11 +41,13 @@ packages:
 #
 # extra-deps: []
 extra-deps:                                                                                                   
-  - srtree-1.0.0.1
-  - pandoc-symreg-0.2.0.0
   - hegg-0.3.0.0
   - git: https://github.com/folivetti/srtree-datasets.git
     commit: a0c09b3c339471b086518c774dee4a00be37649b
+  - pandoc-symreg-0.2.1.0
+  - srtree-1.0.0.2
+  - git: https://github.com/folivetti/srtree-eqsat                                                           
+    commit: 582c9c4f567e64f543380c74a0f45a4722cfa13a
 # Override default flag values for local packages and extra-deps
 # flags: {}
 

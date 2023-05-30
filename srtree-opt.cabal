@@ -40,9 +40,9 @@ library
     , hmatrix-morpheus
     , mtl ==2.2.*
     , optparse-applicative ==0.17.*
-    , pandoc-symreg >=0.2.0.0
+    , pandoc-symreg >=0.2.1.0
     , split
-    , srtree >=1.0.0.1 && <1.1
+    , srtree >=1.0.0.2
     , srtree-datasets
     , vector
     , zlib
@@ -63,9 +63,9 @@ executable srtree-opt
     , hmatrix-morpheus
     , mtl ==2.2.*
     , optparse-applicative ==0.17.*
-    , pandoc-symreg >=0.2.0.0
+    , pandoc-symreg >=0.2.1.0
     , split
-    , srtree >=1.0.0.1 && <1.1
+    , srtree >=1.0.0.2
     , srtree-datasets
     , srtree-opt
     , vector
@@ -88,9 +88,9 @@ test-suite srtree-opt-test
     , hmatrix-morpheus
     , mtl ==2.2.*
     , optparse-applicative ==0.17.*
-    , pandoc-symreg >=0.2.0.0
+    , pandoc-symreg >=0.2.1.0
     , split
-    , srtree >=1.0.0.1 && <1.1
+    , srtree >=1.0.0.2
     , srtree-datasets
     , srtree-opt
     , vector
