@@ -1,5 +1,6 @@
 {-# language LambdaCase #-}
 {-# language ImportQualifiedPost #-}
+{-# language ViewPatterns #-}
 module Main (main) where
 
 import Control.Monad ( unless, forM_ )
@@ -15,6 +16,8 @@ import Text.ParseSR (SRAlgs (..))
 import Text.ParseSR.IO (withInput)
 import Text.Read (readMaybe)
 import Data.Vector qualified as V
+import System.Random
+import Data.Random.Normal ( normals )
 
 envelope :: a -> [a] -> [a]
 envelope c xs = c : xs <> [c]
@@ -63,6 +66,8 @@ data Args = Args
       , simpl       :: Bool
       , dist        :: Maybe Distribution
       , msErr       :: Maybe Double
+      , restart     :: Bool
+      , rseed       :: Int
     } deriving Show
 
 opt :: Parser Args
@@ -123,6 +128,15 @@ opt = Args
        <> showDefault
        <> value Nothing
        <> help "Estimated standard error of the data. If not passed, it uses the model MSE.")
+   <*> switch
+        ( long "restart"
+        <> help "If set, it samples the initial values of the parameters using a Gaussian distribution N(0, 1), otherwise it uses the original values of the expression." )
+   <*> option auto
+       ( long "seed"
+       <> metavar "SEED"
+       <> showDefault
+       <> value (-1)
+       <> help "Random seed to initialize the parameters values. Used only if restart is enabled.")
 
 openWriteWithDefault :: Handle -> String -> IO Handle
 openWriteWithDefault dflt fname =
@@ -131,15 +145,15 @@ openWriteWithDefault dflt fname =
        else openFile fname WriteMode
 {-# INLINE openWriteWithDefault #-}
 
-printResults :: String -> String -> (Fix SRTree -> (Fix SRTree, String)) -> [Either String (Fix SRTree)] -> IO ()
+printResults :: String -> String -> (Int -> Fix SRTree -> (Fix SRTree, String)) -> [Either String (Fix SRTree)] -> IO ()
 printResults fname sname f exprs = do
   hExpr <- openWriteWithDefault stdout fname
   hStat <- openWriteWithDefault stderr sname
-  hPutStrLn hStat "SSE_train_orig,SSE_val_orig,SSE_train_opt,SSE_val_opt"
-  forM_ exprs $ \case
+  hPutStrLn hStat "Index,Filename,Expression,Parameters,Iterations,SSE_train_orig,SSE_val_orig,SSE_train_opt,SSE_val_opt"
+  forM_ (zip [0..] exprs) $ \(ix, e) -> case e of
                    Left  err -> do hPutStrLn hExpr $ "invalid expression: " <> err
                                    hPutStrLn hStat $ "invalid expression: " <> err
-                   Right ex  -> do let (ex', sts) = f ex
+                   Right ex  -> do let (ex', sts) = f ix ex
                                    hPutStrLn hExpr (P.showExpr ex')
                                    hPutStrLn hStat sts
   unless (null fname) $ hClose hExpr
@@ -147,17 +161,23 @@ printResults fname sname f exprs = do
 
 main :: IO ()
 main = do
+  g <- getStdGen
   args <- execParser opts
   ((xTr, yTr, xVal, yVal), varnames) <- loadDataset (dataset args) (hasHeader args)
-  let optimizer = optimize (dist args) (msErr args) (niter args) xTr yTr
+  let seed = if rseed args < 0 then g else mkStdGen (rseed args)
+      optimizer = optimize (dist args) (msErr args) (niter args) xTr yTr
       errorFun  = case dist args of
                     Nothing -> sse
-                    Just d  -> nll d (msErr args)
+                    Just d  -> sse -- nll d (msErr args)
       eTr t    = show . errorFun xTr yTr t
       eVal t   = show . errorFun xVal yVal t
-      genStats  tree = let (tOpt, thetaOpt) = optimizer tree
-                           theta            = V.fromList . snd . floatConstsToParam $ tree
-                        in (paramsToConst (V.toList thetaOpt) tOpt, intercalate "," [eTr tOpt theta, eVal tOpt theta, eTr tOpt thetaOpt, eVal tOpt thetaOpt])
+      genStats ix tree = let (_, t0) = floatConstsToParam tree
+                             thetas = if (restart args) then take (length t0) (normals seed) else t0
+                             (tOpt, thetaOpt, its) = optimizer (Just thetas) tree
+                             theta            = V.fromList . snd . floatConstsToParam $ tree
+                             t'               = paramsToConst (V.toList thetaOpt) tOpt
+                             params           = intercalate ";" . map show $ V.toList thetaOpt
+                          in (t', intercalate "," [show ix, infile args, P.showExpr t', params, show its, eTr tOpt theta, eVal tOpt theta, eTr tOpt thetaOpt, eVal tOpt thetaOpt])
   withInput (infile args) (from args) varnames False (simpl args)
     >>= printResults (outfile args) (stats args) genStats
 

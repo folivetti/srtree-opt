@@ -21,6 +21,7 @@ description:         Please see the README on GitHub at <https://github.com/gith
 
 dependencies:
 - base >= 4.7 && < 5
+- random
 - pandoc-symreg >= 0.2.1.0
 - hmatrix
 - hmatrix-gsl
@@ -33,6 +34,7 @@ dependencies:
 - zlib
 - srtree-datasets
 - srtree >= 1.0.0.2
+- normaldistribution
 
 ghc-options:
 - -Wall

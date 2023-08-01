@@ -20,7 +20,7 @@ type Columns = V.Vector Column
 type Column  = LA.Vector Double
 
 -- | Supported distributions for negative log-likelihood
-data Distribution = Gaussian | Bernoulli
+data Distribution = Gaussian | Bernoulli | Poisson
     deriving (Show, Read, Enum, Bounded)
 
 sse :: Columns -> Column -> Fix SRTree -> V.Vector Double -> Double
@@ -50,6 +50,12 @@ nll Bernoulli _ xss ys tree theta
     yhat = evalTree xss theta LA.scalar tree
     notValid = VS.any (\x -> x /= 0 && x /= 1)
 
+nll Poisson _ xss ys tree theta 
+  | notValid ys = error "For Poisson distribution the output must be non-negative."
+  | otherwise = negate . VS.sum $ ys * yhat - exp yhat
+  where
+    yhat = evalTree xss theta LA.scalar tree
+    notValid = VS.any (<0)
 
 -- | Gradient of the negative log-likelihood
 gradNLL :: Distribution -> Maybe Double -> Columns -> Column -> Fix SRTree -> V.Vector Double -> LA.Vector Double
@@ -65,3 +71,10 @@ gradNLL Bernoulli _ xss ys tree theta
   where
     (yhat, grad) = gradParamsRev xss theta LA.scalar tree
     notValid = VS.any (\x -> x /= 0 && x /= 1)
+
+gradNLL Poisson _ xss ys tree theta
+  | notValid ys = error "For Poisson distribution the output must be non-negative."
+  | otherwise = LA.fromList [negate . LA.sumElements $ g * (ys - exp yhat) | g <- grad]
+  where
+    (yhat, grad) = gradParamsRev xss theta LA.scalar tree
+    notValid = VS.any (<0)
