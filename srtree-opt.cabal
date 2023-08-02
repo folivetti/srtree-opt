@@ -40,7 +40,7 @@ library
     , hmatrix-morpheus
     , mtl ==2.2.*
     , normaldistribution
-    , optparse-applicative ==0.17.*
+    , optparse-applicative >=0.17 && <0.19
     , pandoc-symreg >=0.2.1.0
     , random
     , split
@@ -65,7 +65,7 @@ executable srtree-opt
     , hmatrix-morpheus
     , mtl ==2.2.*
     , normaldistribution
-    , optparse-applicative ==0.17.*
+    , optparse-applicative >=0.17 && <0.19
     , pandoc-symreg >=0.2.1.0
     , random
     , split
@@ -92,7 +92,7 @@ test-suite srtree-opt-test
     , hmatrix-morpheus
     , mtl ==2.2.*
     , normaldistribution
-    , optparse-applicative ==0.17.*
+    , optparse-applicative >=0.17 && <0.19
     , pandoc-symreg >=0.2.1.0
     , random
     , split
