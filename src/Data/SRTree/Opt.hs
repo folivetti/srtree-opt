@@ -16,15 +16,16 @@ import Data.SRTree.Likelihoods
 import Debug.Trace ( trace )
 
 optimize :: Maybe Distribution -> Maybe Double -> Int -> Columns -> Column -> Maybe [Double] -> Fix SRTree -> (Fix SRTree, V.Vector Double, Int)
-optimize mdist msErr niter xss ys mt0 tree = (tree', opt, its)
+optimize mDist mSErr nIter xss ys mTheta tree = (optTree, optTheta, steps)
   where
-    (tree', V.fromList -> t0') = floatConstsToParam tree
-    t0          = case mt0 of
-                    Nothing -> t0'
-                    Just x  -> V.fromList x
-    (opt, its)  = case mdist of
-                    Nothing -> leastSquares niter xss ys tree' t0 
-                    Just d  -> minimizeNLL d msErr niter xss ys tree' t0
+    (optTree, V.fromList -> t0') = floatConstsToParam tree
+
+    t0                = case mTheta of
+                          Nothing -> t0'
+                          Just x  -> V.fromList x
+    (optTheta, steps) = case mDist of
+                          Nothing   -> leastSquares nIter xss ys optTree t0 
+                          Just dist -> minimizeNLL dist mSErr nIter xss ys optTree t0
 
 leastSquares :: Int -> Columns -> Column -> Fix SRTree -> V.Vector Double -> (V.Vector Double, Int)
 leastSquares niter xss ys tree t0
@@ -56,11 +57,14 @@ minimizeNLL dist msErr niter xss ys tree t0
     t0'   = LA.fromList $ V.toList t0
     n     = LA.size t0'
     m     = LA.size ys
-    model = nll dist msErr xss ys tree . V.fromList . LA.toList
-    jacob = gradNLL dist msErr xss ys tree . V.fromList . LA.toList
+    model = nll dist msErr xss ys tree . toVec
+    jacob = gradNLL dist msErr xss ys tree . toVec
 
 minimizeGaussian :: Int -> Columns -> Column -> Fix SRTree -> V.Vector Double -> (V.Vector Double, Int)
 minimizeGaussian = minimizeNLL Gaussian Nothing
 
 minimizeBinomial :: Int -> Columns -> Column -> Fix SRTree -> V.Vector Double -> (V.Vector Double, Int)
 minimizeBinomial = minimizeNLL Bernoulli Nothing
+
+minimizePoisson :: Int -> Columns -> Column -> Fix SRTree -> V.Vector Double -> (V.Vector Double, Int)
+minimizePoisson = minimizeNLL Poisson Nothing
