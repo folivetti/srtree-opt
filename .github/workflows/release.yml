@@ -32,8 +32,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, macOS-latest, windows-latest]
         ghc:
-          - 9.2.5
-        cabal: ["3.6.2.0"]
+          - 9.6.2
+        cabal: ["3.10.1.0"]
     defaults:
       run:
         shell: bash
