@@ -6,8 +6,10 @@ module Main (main) where
 import Control.Monad ( unless, forM_ )
 import Data.Char (toLower, toUpper)
 import Data.List (intercalate)
-import Data.SRTree ( SRTree, Fix (..), floatConstsToParam, paramsToConst )
+import Data.SRTree ( SRTree, Fix (..), floatConstsToParam, paramsToConst, countNodes )
 import Data.SRTree.Opt (optimize, sse, Distribution (..), nll)
+import Data.SRTree.Likelihoods
+import Data.SRTree.ModelSelection
 import Data.SRTree.Print qualified as P
 import Data.SRTree.Datasets (loadDataset)
 import Options.Applicative
@@ -15,9 +17,11 @@ import System.IO ( hClose, hPutStrLn, openFile, stderr, stdout, IOMode(WriteMode
 import Text.ParseSR (SRAlgs (..))
 import Text.ParseSR.IO (withInput)
 import Text.Read (readMaybe)
-import Data.Vector qualified as V
+import Data.Vector.Storable qualified as VS
 import System.Random
 import Data.Random.Normal ( normals )
+
+import Debug.Trace ( trace )
 
 envelope :: a -> [a] -> [a]
 envelope c xs = c : xs <> [c]
@@ -61,6 +65,7 @@ data Args = Args
       , outfile     :: String
       , stats       :: String
       , dataset     :: String
+      , test        :: String
       , niter       :: Int
       , hasHeader   :: Bool
       , simpl       :: Bool
@@ -103,6 +108,12 @@ opt = Args
        <> short 'd'
        <> metavar "DATASET-FILENAME"
        <> help "Filename of the dataset used for optimizing the parameters. Empty string omits stats that make use of the training data. It will auto-detect and handle gzipped file based on gz extension. It will also auto-detect the delimiter. \nThe filename can include extra information: filename.csv:start:end:target:vars where start and end corresponds to the range of rows that should be used for fitting, target is the column index (or name) of the target variable and cols is a comma separated list of column indeces or names of the variables in the same order as used by the symbolic model." )
+   <*> strOption
+       ( long "test"
+       <> metavar "TEST"
+       <> showDefault
+       <> value ""
+       <> help "Filename of the test dataset. Empty string omits stats that make use of the training data. It can have additional information as in the training set, but the validation range will be discarded." )
    <*> option auto
        ( long "niter"
        <> metavar "NITER"
@@ -145,11 +156,17 @@ openWriteWithDefault dflt fname =
        else openFile fname WriteMode
 {-# INLINE openWriteWithDefault #-}
 
+csvHeader :: String
+csvHeader = "Index,Filename,Expression,Number_of_nodes,Number_of_parameters,Parameters,"
+         <> "Iterations,SSE_train_orig,SSE_val_orig,SSE_test_orig,SSE_train_opt,SSE_val_opt,SSE_test_opt,"
+         <> "BIC,AIC,MDL,MDL_Freq,NegLogLikelihood,LogFunctional,LogParameters,Fisher"
+{-# inline csvHeader #-}
+
 printResults :: String -> String -> (Int -> Fix SRTree -> (Fix SRTree, String)) -> [Either String (Fix SRTree)] -> IO ()
 printResults fname sname f exprs = do
   hExpr <- openWriteWithDefault stdout fname
   hStat <- openWriteWithDefault stderr sname
-  hPutStrLn hStat "Index,Filename,Expression,Parameters,Iterations,SSE_train_orig,SSE_val_orig,SSE_train_opt,SSE_val_opt"
+  hPutStrLn hStat csvHeader 
   forM_ (zip [0..] exprs) $ \(ix, e) -> case e of
                    Left  err -> do hPutStrLn hExpr $ "invalid expression: " <> err
                                    hPutStrLn hStat $ "invalid expression: " <> err
@@ -161,23 +178,46 @@ printResults fname sname f exprs = do
 
 main :: IO ()
 main = do
-  g <- getStdGen
+  g    <- getStdGen
   args <- execParser opts
   ((xTr, yTr, xVal, yVal), varnames) <- loadDataset (dataset args) (hasHeader args)
-  let seed = if rseed args < 0 then g else mkStdGen (rseed args)
+  ((xTe, yTe, _, _), _)              <- if null (test args)
+                                          then pure ((xVal, yVal, xVal, yVal), varnames)
+                                          else loadDataset (test args) (hasHeader args)
+  let seed      = if rseed args < 0 then g else mkStdGen (rseed args)
       optimizer = optimize (dist args) (msErr args) (niter args) xTr yTr
-      errorFun  = case dist args of
-                    Nothing -> sse
-                    Just d  -> sse -- nll d (msErr args)
-      eTr t    = show . errorFun xTr yTr t
-      eVal t   = show . errorFun xVal yVal t
-      genStats ix tree = let (_, t0) = floatConstsToParam tree
-                             thetas = if (restart args) then take (length t0) (normals seed) else t0
+      eTr   t   = show . sse xTr yTr t
+      eVal  t   = show . sse xVal yVal t
+      eTest t   = show . sse xTe yTe t
+      dist'     = case dist args of
+                    Nothing -> Gaussian 
+                    Just x  -> x
+
+      genStats ix tree = let t0     = snd $ floatConstsToParam tree
+                             thetas = if restart args 
+                                        then take (length t0) (normals seed) 
+                                        else t0
+
                              (tOpt, thetaOpt, its) = optimizer (Just thetas) tree
-                             theta            = V.fromList . snd . floatConstsToParam $ tree
-                             t'               = paramsToConst (V.toList thetaOpt) tOpt
-                             params           = intercalate ";" . map show $ V.toList thetaOpt
-                          in (t', intercalate "," [show ix, infile args, P.showExpr t', params, show its, eTr tOpt theta, eVal tOpt theta, eTr tOpt thetaOpt, eVal tOpt thetaOpt])
+
+                             t'       = paramsToConst (VS.toList thetaOpt) tOpt
+                             nNodes   = countNodes t'
+                             nParams  = VS.length thetaOpt
+                             params   = intercalate ";" . map show $ VS.toList thetaOpt
+                             fisher   = intercalate ";" . map show $ fisherNLL dist' (msErr args) xTr yTr tOpt thetaOpt
+                             statsStr = [show ix, infile args, P.showExpr t', show nNodes, show nParams, params
+                                        , show its, eTr tree thetaOpt, eVal tree thetaOpt, eTest tree thetaOpt
+                                        , eTr tOpt thetaOpt, eVal tOpt thetaOpt, eTest tOpt thetaOpt
+                                        , show $ bic dist' (msErr args) xTr yTr thetaOpt tOpt
+                                        , show $ aic dist' (msErr args) xTr yTr thetaOpt tOpt
+                                        , show $ mdl dist' (msErr args) xTr yTr thetaOpt tOpt
+                                        , show $ mdlFreq dist' (msErr args) xTr yTr thetaOpt tOpt
+                                        , show $ nll dist' (msErr args) xTr yTr tOpt thetaOpt
+                                        , show $ logFunctional tOpt
+                                        , show $ logParameters dist' (msErr args) xTr yTr thetaOpt tOpt
+                                        , fisher
+                                        ]
+                          in (t', intercalate "," statsStr)
   withInput (infile args) (from args) varnames False (simpl args)
     >>= printResults (outfile args) (stats args) genStats
 

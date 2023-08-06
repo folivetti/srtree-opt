@@ -5,7 +5,7 @@ cabal-version: 1.12
 -- see: https://github.com/sol/hpack
 
 name:           srtree-opt
-version:        0.1.0.0
+version:        0.1.0.1
 description:    Please see the README on GitHub at <https://github.com/githubuser/srtree-opt#readme>
 homepage:       https://github.com/githubuser/srtree-opt#readme
 bug-reports:    https://github.com/githubuser/srtree-opt/issues
@@ -26,6 +26,7 @@ source-repository head
 library
   exposed-modules:
       Data.SRTree.Likelihoods
+      Data.SRTree.ModelSelection
       Data.SRTree.Opt
   other-modules:
       Paths_srtree_opt
@@ -44,7 +45,7 @@ library
     , pandoc-symreg >=0.2.1.0
     , random
     , split
-    , srtree >=1.0.0.2
+    , srtree
     , srtree-datasets
     , vector
     , zlib
@@ -69,7 +70,7 @@ executable srtree-opt
     , pandoc-symreg >=0.2.1.0
     , random
     , split
-    , srtree >=1.0.0.2
+    , srtree
     , srtree-datasets
     , srtree-opt
     , vector
@@ -96,7 +97,7 @@ test-suite srtree-opt-test
     , pandoc-symreg >=0.2.1.0
     , random
     , split
-    , srtree >=1.0.0.2
+    , srtree
     , srtree-datasets
     , srtree-opt
     , vector

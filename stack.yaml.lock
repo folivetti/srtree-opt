@@ -12,34 +12,38 @@ packages:
   original:
     hackage: hegg-0.3.0.0
 - completed:
-    commit: a0c09b3c339471b086518c774dee4a00be37649b
+    commit: 7ce188bf5f1d752ae7da40a047c2dda5e75a64fe
+    git: https://github.com/folivetti/srtree.git
+    name: srtree
+    pantry-tree:
+      sha256: 6c776accb4133c1faa22b669ffa279a999b65b2a6e8d489aa71b17740b0b7d15
+      size: 2415
+    version: 1.0.0.5
+  original:
+    commit: 7ce188bf5f1d752ae7da40a047c2dda5e75a64fe
+    git: https://github.com/folivetti/srtree.git
+- completed:
+    commit: 29fcb0f10dc77d5fdeb28bf50d633cef332d329f
     git: https://github.com/folivetti/srtree-datasets.git
     name: srtree-datasets
     pantry-tree:
-      sha256: df566b7b39b96fb1833b8769dad85fa02c352f624de851470a05626e2f147303
-      size: 691
+      sha256: 5e715c7f69cee1903ff9f038baefee6025df98f80e6e87b2e7995291261e2b1d
+      size: 693
     version: 0.1.0.0
   original:
-    commit: a0c09b3c339471b086518c774dee4a00be37649b
+    commit: 29fcb0f10dc77d5fdeb28bf50d633cef332d329f
     git: https://github.com/folivetti/srtree-datasets.git
 - completed:
-    commit: 662cae4f4c4eece00fdb747176d24aeb63b97024
+    commit: 8b7ff7258ab3f21c605f218fad45f1d388177110
     git: https://github.com/folivetti/pandoc-symreg
     name: pandoc-symreg
     pantry-tree:
-      sha256: 3463e2456e118106287f636259ca42a8f2845b08fba285dfd1d00248d2728c92
-      size: 2588
+      sha256: 9c6dd1b1335417db3be85497312b67848a6a7353ab5bd0aaaa7c2062f7718924
+      size: 2589
     version: 0.2.1.3
   original:
-    commit: 662cae4f4c4eece00fdb747176d24aeb63b97024
+    commit: 8b7ff7258ab3f21c605f218fad45f1d388177110
     git: https://github.com/folivetti/pandoc-symreg
-- completed:
-    hackage: srtree-1.0.0.2@sha256:071b351b8ca1d970ee74ce9e7a8f7496a122b47c34e99484703c97a279ad7a93,2173
-    pantry-tree:
-      sha256: 1fa7ed5b8666a2ac6e1b78a52b588da50a52fb5007293148c9037b9de592c6c5
-      size: 684
-  original:
-    hackage: srtree-1.0.0.2
 snapshots:
 - completed:
     sha256: 1d5fb7e344e76dd2c8958e3061d4e4dabb50a1355e6ff02e7d0e4f754c0adf47

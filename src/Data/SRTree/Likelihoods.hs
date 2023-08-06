@@ -8,15 +8,21 @@ module Data.SRTree.Likelihoods
   , nll
   , gradNLL
   , fisherNLL
+  , getSErr
   )
     where
 -- TODO: replace Data.Vector with Data.Vector.Storable
+-- import qualified Data.Vector as V
 import qualified Data.Vector as V
 import qualified Data.Vector.Storable as VS
 import qualified Numeric.LinearAlgebra as LA
-import Data.SRTree (SRTree (..), gradParamsRev, evalTree, deriveBy, floatConstsToParam)
-import Data.SRTree.Recursion (Fix(..))
+import Data.SRTree (SRTree (..), Fix(..), floatConstsToParam)
+import Data.SRTree.AD ( reverseModeUnique )
+import Data.SRTree.Eval ( evalTree )
+import Data.SRTree.Derivative ( deriveByParam )
 import Data.Maybe ( fromMaybe )
+
+import Debug.Trace ( trace )
 
 type Columns = V.Vector Column
 type Column  = LA.Vector Double
@@ -26,43 +32,46 @@ data Distribution = Gaussian | Bernoulli | Poisson
     deriving (Show, Read, Enum, Bounded)
 
 -- | Sum-of-square errors or Sum-of-square residues
-sse :: Columns -> Column -> Fix SRTree -> V.Vector Double -> Double
-sse xss ys tree theta = sum err
+sse :: Columns -> Column -> Fix SRTree -> VS.Vector Double -> Double
+sse xss ys tree theta = err
   where
-    yhat  = evalTree xss theta LA.scalar tree
-    err   = LA.toList $ (ys - yhat) ^ (2 :: Int)
+    yhat  = evalTree xss theta VS.singleton tree
+    err   = VS.sum $ (ys - yhat) ^ (2 :: Int)
 
 -- | Mean squared errors
-mse :: Columns -> Column -> Fix SRTree -> V.Vector Double -> Double
-mse xss ys tree theta = sse xss ys tree theta / fromIntegral (LA.size ys)
+mse :: Columns -> Column -> Fix SRTree -> VS.Vector Double -> Double
+mse xss ys tree theta = sse xss ys tree theta / fromIntegral (VS.length ys)
 
 -- | Root of the mean squared errors
-rmse :: Columns -> Column -> Fix SRTree -> V.Vector Double -> Double
+rmse :: Columns -> Column -> Fix SRTree -> VS.Vector Double -> Double
 rmse xss ys tree = sqrt . mse xss ys tree
 
 -- | logistic function
+logistic :: Floating a => a -> a
 logistic x = 1 / (1 + exp (-x))
 {-# inline logistic #-}
 
 -- | get the standard error from a Maybe Double
 -- if it is Nothing, estimate from the ssr, otherwise use the current value
 -- For distributions other than Gaussian, it defaults to a constant 1
+getSErr :: Num a => Distribution -> a -> Maybe a -> a
 getSErr Gaussian est = fromMaybe est
 getSErr _        _   = const 1
 {-# inline getSErr #-}
 
 -- negation of the sum of values in a vector
-negSum = negate . LA.sumElements
+negSum :: VS.Vector Double -> Double
+negSum = negate . VS.sum
 {-# inline negSum #-}
 
 -- | Negative log-likelihood
-nll :: Distribution -> Maybe Double -> Columns -> Column -> Fix SRTree -> V.Vector Double -> Double
+nll :: Distribution -> Maybe Double -> Columns -> Column -> Fix SRTree -> VS.Vector Double -> Double
 
 -- | Gaussian distribution
 nll Gaussian msErr xss ys t theta = 0.5*(ssr/s2 + m*log (2*pi*s2))
   where
-    m    = fromIntegral $ LA.size ys
-    p    = fromIntegral $ V.length theta
+    m    = fromIntegral $ VS.length ys
+    p    = fromIntegral $ VS.length theta
     ssr  = sse xss ys t theta
     est  = sqrt $ ssr / (m - p)
     sErr = getSErr Gaussian est msErr
@@ -74,23 +83,23 @@ nll Bernoulli _ xss ys tree theta
   | notValid ys = error "For Bernoulli distribution the output must be either 0 or 1."
   | otherwise   = negSum $ VS.zipWith (\a b -> if a == 0.0 then log (1 - b) else log b) ys yhat
   where
-    yhat     = logistic $ evalTree xss theta LA.scalar tree
+    yhat     = logistic $ evalTree xss theta VS.singleton tree
     notValid = VS.any (\x -> x /= 0 && x /= 1)
 
 nll Poisson _ xss ys tree theta 
   | notValid ys = error "For Poisson distribution the output must be non-negative."
   | otherwise = negSum $ ys * yhat - exp yhat
   where
-    yhat     = evalTree xss theta LA.scalar tree
+    yhat     = evalTree xss theta VS.singleton tree
     notValid = VS.any (<0)
 
 -- | Gradient of the negative log-likelihood
-gradNLL :: Distribution -> Maybe Double -> Columns -> Column -> Fix SRTree -> V.Vector Double -> LA.Vector Double
-gradNLL Gaussian msErr xss ys tree theta = LA.fromList [LA.sumElements (g * err) / sErr * sErr | g <- grad]
+gradNLL :: Distribution -> Maybe Double -> Columns -> Column -> Fix SRTree -> VS.Vector Double -> VS.Vector Double
+gradNLL Gaussian msErr xss ys tree theta = VS.fromList [VS.sum (g * err) / sErr * sErr | g <- grad]
   where
-    m            = fromIntegral $ LA.size ys
-    p            = fromIntegral $ V.length theta
-    (yhat, grad) = gradParamsRev xss theta LA.scalar tree
+    m            = fromIntegral $ VS.length ys
+    p            = fromIntegral $ VS.length theta
+    (yhat, grad) = reverseModeUnique xss theta VS.singleton tree
     err          = yhat - ys
     ssr          = sse xss ys tree theta
     est          = sqrt $ ssr / (m - p)
@@ -98,32 +107,32 @@ gradNLL Gaussian msErr xss ys tree theta = LA.fromList [LA.sumElements (g * err)
 
 gradNLL Bernoulli _ xss ys tree theta
   | notValid ys = error "For Bernoulli distribution the output must be either 0 or 1."
-  | otherwise   = LA.fromList [LA.sumElements $ (logistic yhat - ys) * g | g <- grad]
+  | otherwise   = VS.fromList [VS.sum $ (logistic yhat - ys) * g | g <- grad]
   where
-    (yhat, grad) = gradParamsRev xss theta LA.scalar tree
+    (yhat, grad) = reverseModeUnique xss theta VS.singleton tree
     notValid     = VS.any (\x -> x /= 0 && x /= 1)
 
 gradNLL Poisson _ xss ys tree theta
   | notValid ys = error "For Poisson distribution the output must be non-negative."
-  | otherwise   = LA.fromList [negate . LA.sumElements $ g * (ys - exp yhat) | g <- grad]
+  | otherwise   = VS.fromList [negate . VS.sum $ g * (ys - exp yhat) | g <- grad]
   where
-    (yhat, grad) = gradParamsRev xss theta LA.scalar tree
+    (yhat, grad) = reverseModeUnique xss theta VS.singleton tree
     notValid     = VS.any (<0)
 
 -- | Fisher information of negative log-likelihood
-fisherNLL :: Distribution -> Maybe Double -> Columns -> Column -> Fix SRTree -> V.Vector Double -> [Double]
+fisherNLL :: Distribution -> Maybe Double -> Columns -> Column -> Fix SRTree -> VS.Vector Double -> [Double]
 fisherNLL dist msErr xss ys tree theta = do 
   ix <- [0 .. p-1]
-  let dtdix   = deriveBy True ix t'
-      d2tdix2 = deriveBy True ix dtdix
+  let dtdix   = deriveByParam ix t'
+      d2tdix2 = deriveByParam ix dtdix
       f'      = eval dtdix
       f''     = eval d2tdix2
-  pure . (/sErr^2) . LA.sumElements $ phi' * f'^2 - res * f''
+  pure . (/sErr^2) . VS.sum $ phi' * f'^2 - res * f''
   where
-    m       = LA.size ys
-    p       = V.length theta
+    m       = VS.length ys
+    p       = VS.length theta
     (t', _) = floatConstsToParam tree
-    eval    = evalTree xss theta LA.scalar
+    eval    = evalTree xss theta VS.singleton
 
     yhat    = eval t'
     res     = ys - phi
@@ -140,18 +149,5 @@ fisherNLL dist msErr xss ys tree theta = do
     ssr     = sse xss ys tree theta
     sErr    = getSErr dist est msErr
     est     = sqrt $ ssr / fromIntegral (m - p)
-{-
-diagHess :: Distribution -> Double -> Column -> Column -> Column -> Column -> Double
-diagHess Gaussian sErr ys yhat fvals' fvals'' = sum f_ii / (sErr ^ 2)
-  where
-    f_ii = LA.toList $ fvals'^2 - res*fvals''
-    res  = ys - yhat
-
-diagHess Bernoulli _ ys yhat fvals' fvals'' = sum . LA.toList $ (1 - phi)*phi*fvals'^2 + (phi - ys)*fvals''
-  where phi = logistic yhat
-
-diagHess Poisson _ ys yhat fvals' fvals'' = sum . LA.toList $ phi*fvals'^2 + (phi - ys)*fvals''
-  where phi = exp yhat
--}
 
 -- | Hessian of negative log-likelihood

@@ -3,68 +3,65 @@
 {-# language ImportQualifiedPost #-}
 {-# language ViewPatterns #-}
 module Data.SRTree.Opt
-    ( optimize, sse, mse, rmse, Column, Columns, minimizeGaussian, minimizeBinomial, nll, Distribution (..), gradNLL, fisherNLL )
+    ( optimize, sse, mse, rmse, Column, Columns, minimizeGaussian, minimizeBinomial, minimizePoisson, nll, Distribution (..), gradNLL, fisherNLL )
     where
 
-import Data.SRTree (SRTree (..), gradParamsRev, floatConstsToParam, evalTree)
-import Data.SRTree.Recursion (Fix(..))
-import Data.Vector qualified as V
+import Data.SRTree ( SRTree (..), Fix(..), floatConstsToParam )
+import Data.SRTree.Eval ( evalTree )
+import Data.SRTree.AD ( reverseModeUnique )
+import Data.Vector.Storable qualified as VS
 import Numeric.GSL.Fitting (FittingMethod (..), nlFitting)
 import Numeric.GSL.Minimization (MinimizeMethodD (..), minimizeVD)
-import Numeric.LinearAlgebra qualified as LA
+import Numeric.LinearAlgebra ( size, fromColumns )
 import Data.SRTree.Likelihoods
 import Debug.Trace ( trace )
 
-optimize :: Maybe Distribution -> Maybe Double -> Int -> Columns -> Column -> Maybe [Double] -> Fix SRTree -> (Fix SRTree, V.Vector Double, Int)
+optimize :: Maybe Distribution -> Maybe Double -> Int -> Columns -> Column -> Maybe [Double] -> Fix SRTree -> (Fix SRTree, VS.Vector Double, Int)
 optimize mDist mSErr nIter xss ys mTheta tree = (optTree, optTheta, steps)
   where
-    (optTree, V.fromList -> t0') = floatConstsToParam tree
+    (optTree, VS.fromList -> t0') = floatConstsToParam tree
 
     t0                = case mTheta of
                           Nothing -> t0'
-                          Just x  -> V.fromList x
+                          Just x  -> VS.fromList x
     (optTheta, steps) = case mDist of
                           Nothing   -> leastSquares nIter xss ys optTree t0 
                           Just dist -> minimizeNLL dist mSErr nIter xss ys optTree t0
 
-leastSquares :: Int -> Columns -> Column -> Fix SRTree -> V.Vector Double -> (V.Vector Double, Int)
+leastSquares :: Int -> Columns -> Column -> Fix SRTree -> VS.Vector Double -> (VS.Vector Double, Int)
 leastSquares niter xss ys tree t0
-  | n == 0    = (t0, 0)
-  | n > m     = (t0, 0)
-  | otherwise = (toVec t_opt, iters path)
+  | niter == 0 = (t0, 0)
+  | n == 0     = (t0, 0)
+  | n > m      = (t0, 0)
+  | otherwise  = (t_opt, iters path)
   where
-    (t_opt, path) = nlFitting LevenbergMarquardtScaled 1e-6 1e-6 niter model jacob t0'
-    toVec         = V.fromList . LA.toList
-    iters         = fst . LA.size   
-    t0'           = LA.fromList $ V.toList t0
-    n             = LA.size t0'
-    m             = LA.size ys
-    model theta   = let theta' = V.fromList (LA.toList theta)
-                     in subtract ys $ evalTree xss theta' LA.scalar tree
-    jacob theta   = let theta' = V.fromList (LA.toList theta) 
-                     in LA.fromColumns . snd $ gradParamsRev xss theta' LA.scalar tree
+    (t_opt, path) = nlFitting LevenbergMarquardtScaled 1e-6 1e-6 niter model jacob t0
+    iters         = fst . size  
+    n             = VS.length t0
+    m             = VS.length ys
+    model theta   = subtract ys $ evalTree xss theta VS.singleton tree
+    jacob theta   = fromColumns . snd $ reverseModeUnique xss theta VS.singleton tree
 
-minimizeNLL :: Distribution -> Maybe Double -> Int -> Columns -> Column -> Fix SRTree -> V.Vector Double -> (V.Vector Double, Int)
+minimizeNLL :: Distribution -> Maybe Double -> Int -> Columns -> Column -> Fix SRTree -> VS.Vector Double -> (VS.Vector Double, Int)
 minimizeNLL dist msErr niter xss ys tree t0
-  | n == 0    = (t0, 0)
-  | n > m     = (t0, 0)
-  | otherwise = (toVec t_opt, iters path)
+  | niter == 0 = (t0, 0)
+  | n == 0     = (t0, 0)
+  | n > m      = (t0, 0)
+  | otherwise  = (t_opt, iters path)
   where
-    (t_opt, path) = minimizeVD VectorBFGS2 1e-6 niter 1e-3 1e-6 model jacob t0'
+    (t_opt, path) = minimizeVD VectorBFGS2 1e-6 niter 1e-3 1e-6 model jacob t0
 
-    toVec = V.fromList . LA.toList
-    iters = fst . LA.size   
-    t0'   = LA.fromList $ V.toList t0
-    n     = LA.size t0'
-    m     = LA.size ys
-    model = nll dist msErr xss ys tree . toVec
-    jacob = gradNLL dist msErr xss ys tree . toVec
+    iters = fst . size   
+    n     = VS.length t0
+    m     = VS.length ys
+    model = nll dist msErr xss ys tree
+    jacob = gradNLL dist msErr xss ys tree
 
-minimizeGaussian :: Int -> Columns -> Column -> Fix SRTree -> V.Vector Double -> (V.Vector Double, Int)
+minimizeGaussian :: Int -> Columns -> Column -> Fix SRTree -> VS.Vector Double -> (VS.Vector Double, Int)
 minimizeGaussian = minimizeNLL Gaussian Nothing
 
-minimizeBinomial :: Int -> Columns -> Column -> Fix SRTree -> V.Vector Double -> (V.Vector Double, Int)
+minimizeBinomial :: Int -> Columns -> Column -> Fix SRTree -> VS.Vector Double -> (VS.Vector Double, Int)
 minimizeBinomial = minimizeNLL Bernoulli Nothing
 
-minimizePoisson :: Int -> Columns -> Column -> Fix SRTree -> V.Vector Double -> (V.Vector Double, Int)
+minimizePoisson :: Int -> Columns -> Column -> Fix SRTree -> VS.Vector Double -> (VS.Vector Double, Int)
 minimizePoisson = minimizeNLL Poisson Nothing

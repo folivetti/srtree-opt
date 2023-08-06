@@ -33,7 +33,7 @@ dependencies:
 - split
 - zlib
 - srtree-datasets
-- srtree >= 1.0.0.2
+- srtree
 - normaldistribution
 
 ghc-options:
