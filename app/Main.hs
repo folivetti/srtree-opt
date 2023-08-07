@@ -157,9 +157,9 @@ openWriteWithDefault dflt fname =
 {-# INLINE openWriteWithDefault #-}
 
 csvHeader :: String
-csvHeader = "Index,Filename,Expression,Number_of_nodes,Number_of_parameters,Parameters,"
-         <> "Iterations,SSE_train_orig,SSE_val_orig,SSE_test_orig,SSE_train_opt,SSE_val_opt,SSE_test_opt,"
-         <> "BIC,AIC,MDL,MDL_Freq,NegLogLikelihood,LogFunctional,LogParameters,Fisher"
+csvHeader = "Index,Filename,Expression,Number_of_nodes,Number_of_parameters,Parameters," -- basic
+         <> "Iterations,SSE_train_orig,SSE_val_orig,SSE_test_orig,SSE_train_opt,SSE_val_opt,SSE_test_opt," -- sse
+         <> "BIC,AIC,MDL,MDL_Freq,NegLogLikelihood,LogFunctional,LogParameters,Fisher" -- info
 {-# inline csvHeader #-}
 
 printResults :: String -> String -> (Int -> Fix SRTree -> (Fix SRTree, String)) -> [Either String (Fix SRTree)] -> IO ()
