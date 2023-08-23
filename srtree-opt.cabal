@@ -25,6 +25,7 @@ source-repository head
 
 library
   exposed-modules:
+      Data.SRTree.ConfidenceIntervals
       Data.SRTree.Likelihoods
       Data.SRTree.ModelSelection
       Data.SRTree.Opt
@@ -47,6 +48,7 @@ library
     , split
     , srtree
     , srtree-datasets
+    , statistics
     , vector
     , zlib
   default-language: Haskell2010
@@ -73,6 +75,7 @@ executable srtree-opt
     , srtree
     , srtree-datasets
     , srtree-opt
+    , statistics
     , vector
     , zlib
   default-language: Haskell2010
@@ -100,6 +103,7 @@ test-suite srtree-opt-test
     , srtree
     , srtree-datasets
     , srtree-opt
+    , statistics
     , vector
     , zlib
   default-language: Haskell2010

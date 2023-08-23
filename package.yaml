@@ -34,7 +34,9 @@ dependencies:
 - zlib
 - srtree-datasets
 - srtree
+# TODO: remove normaldistribution deprecated by statistics
 - normaldistribution
+- statistics
 
 ghc-options:
 - -Wall

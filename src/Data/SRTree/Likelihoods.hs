@@ -9,6 +9,7 @@ module Data.SRTree.Likelihoods
   , gradNLL
   , fisherNLL
   , getSErr
+  , hessianNLL
   )
     where
 -- TODO: replace Data.Vector with Data.Vector.Storable
@@ -129,25 +130,49 @@ fisherNLL dist msErr xss ys tree theta = do
       f''     = eval d2tdix2
   pure . (/sErr^2) . VS.sum $ phi' * f'^2 - res * f''
   where
-    m       = VS.length ys
-    p       = VS.length theta
-    (t', _) = floatConstsToParam tree
-    eval    = evalTree xss theta VS.singleton
+    m    = VS.length ys
+    p    = VS.length theta
+    t'   = fst $ floatConstsToParam tree
+    eval = evalTree xss theta VS.singleton
+    ssr  = sse xss ys tree theta
+    sErr = getSErr dist est msErr
+    est  = sqrt $ ssr / fromIntegral (m - p)
+    yhat = eval t'
+    res  = ys - phi
 
-    yhat    = eval t'
-    res     = ys - phi
-
-    phi     = case dist of
-                Gaussian  -> yhat
-                Bernoulli -> logistic yhat
-                Poisson   -> exp yhat
-    phi'    = case dist of
-                Gaussian  -> 1
-                Bernoulli -> phi*(1 - phi)
-                Poisson   -> phi
-
-    ssr     = sse xss ys tree theta
-    sErr    = getSErr dist est msErr
-    est     = sqrt $ ssr / fromIntegral (m - p)
+    (phi, phi') = case dist of
+                    Gaussian  -> (yhat, 1)
+                    Bernoulli -> (logistic yhat, phi*(1 - phi))
+                    Poisson   -> (exp yhat, phi)
 
 -- | Hessian of negative log-likelihood
+--
+-- Note, though the Fisher is just the diagonal of the return of this function
+-- it is better to keep them as different functions for efficiency
+hessianNLL :: Distribution -> Maybe Double -> Columns -> Column -> Fix SRTree -> VS.Vector Double -> [[Double]]
+hessianNLL dist msErr xss ys tree theta = do 
+  ix <- [0 .. p-1]
+  let dtdix = deriveByParam ix t'
+      fx    = eval dtdix
+      rs    = do iy <- [0 .. p-1]
+                 let d2tdixy = deriveByParam iy dtdix
+                     dtdiy   = deriveByParam iy t'
+                     fy      = eval dtdiy
+                     fxy     = eval d2tdixy
+                 pure . (/sErr^2) . VS.sum $ phi' * fx * fy - res * fxy
+  pure rs
+  where
+    m    = VS.length ys
+    p    = VS.length theta
+    t'   = fst $ floatConstsToParam tree
+    eval = evalTree xss theta VS.singleton
+    ssr  = sse xss ys tree theta
+    sErr = getSErr dist est msErr
+    est  = sqrt $ ssr / fromIntegral (m - p)
+    yhat = eval t'
+    res  = ys - phi
+
+    (phi, phi') = case dist of
+                    Gaussian  -> (yhat, 1)
+                    Bernoulli -> (logistic yhat, phi*(1 - phi))
+                    Poisson   -> (exp yhat, phi)
