@@ -3,7 +3,7 @@
 {-# language ImportQualifiedPost #-}
 {-# language ViewPatterns #-}
 module Data.SRTree.Opt
-    ( optimize, sse, mse, rmse, Column, Columns, minimizeGaussian, minimizeBinomial, minimizePoisson, nll, Distribution (..), gradNLL, fisherNLL )
+    ( optimize, sse, mse, rmse, Column, Columns, minimizeNLL, minimizeNLLWithFixedParam, minimizeGaussian, minimizeBinomial, minimizePoisson, nll, Distribution (..), gradNLL, fisherNLL )
     where
 
 import Data.SRTree ( SRTree (..), Fix(..), floatConstsToParam )
@@ -56,6 +56,21 @@ minimizeNLL dist msErr niter xss ys tree t0
     m     = VS.length ys
     model = nll dist msErr xss ys tree
     jacob = gradNLL dist msErr xss ys tree
+
+minimizeNLLWithFixedParam :: Distribution -> Maybe Double -> Int -> Columns -> Column -> Fix SRTree -> Int -> VS.Vector Double -> (VS.Vector Double, Int)
+minimizeNLLWithFixedParam dist msErr niter xss ys tree ix t0
+  | niter == 0 = (t0, 0)
+  | n == 0     = (t0, 0)
+  | n > m      = (t0, 0)
+  | otherwise  = (t_opt, iters path)
+  where
+    (t_opt, path) = minimizeVD VectorBFGS2 1e-6 niter 1e-3 1e-6 model jacob t0
+
+    iters   = fst . size   
+    n       = VS.length t0
+    m       = VS.length ys
+    model   = nll dist msErr xss ys tree
+    jacob t = gradNLL dist msErr xss ys tree t VS.// [(ix, 0.0)]
 
 minimizeGaussian :: Int -> Columns -> Column -> Fix SRTree -> VS.Vector Double -> (VS.Vector Double, Int)
 minimizeGaussian = minimizeNLL Gaussian Nothing
