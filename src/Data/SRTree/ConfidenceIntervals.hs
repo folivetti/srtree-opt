@@ -41,10 +41,10 @@ data ProfileT = ProfileT { _taus      :: LA.Vector Double
                          }
 
 paramCI :: CIType -> Int -> VS.Vector Double -> Double -> [CI]
-paramCI (Laplace stats) nSamples theta alpha = zipWith3 CI (VS.toList theta) lows highs
+paramCI (Laplace stats) nSamples theta alpha = trace (show t) $ zipWith3 CI (VS.toList theta) lows highs
   where
     k      = VS.length theta
-    t      = quantile (studentT . fromIntegral $ nSamples - k) (alpha / 2.0)
+    t      = quantile (studentT . fromIntegral $ nSamples - k) (1 - alpha / 2.0)
     stdErr = _stdErr stats
     lows   = VS.toList $ VS.zipWith (-) theta $ VS.map (*t) stdErr
     highs  = VS.toList $ VS.zipWith (+) theta $ VS.map (*t) stdErr
@@ -52,7 +52,7 @@ paramCI (Laplace stats) nSamples theta alpha = zipWith3 CI (VS.toList theta) low
 paramCI (Profile stats profiles) nSamples theta alpha = zipWith3 CI (VS.toList theta) lows highs
   where
     k        = VS.length theta
-    t        = quantile (studentT . fromIntegral $ nSamples - k) (alpha / 2.0)
+    t        = quantile (studentT . fromIntegral $ nSamples - k) (1 - alpha / 2.0)
     stdErr   = _stdErr stats
     lows     = map (\p -> _tau2theta p (-t)) profiles
     highs    = map (\p -> _tau2theta p t) profiles
@@ -115,7 +115,7 @@ getAllProfiles dist mSErr xss ys tree theta stdErr = reverse (getAll 0 [])
 
     getAll ix acc | ix == nParams = acc
                   | otherwise     = case profFun ix of
-                                      Left t  -> getAllProfiles dist mSErr xss ys tree t stdErr
+                                      Left t  -> trace ("restart" <> show t) $ getAllProfiles dist mSErr xss ys tree t stdErr
                                       Right p -> getAll (ix + 1) (p : acc)
 
 getProfile dist mSErr xss ys tree theta stdErr_i tau_max ix = 
@@ -128,7 +128,7 @@ getProfile dist mSErr xss ys tree theta stdErr_i tau_max ix =
     nll_opt = nll dist mSErr xss ys tree theta
     go 0 _     _ _         acc = Right acc
     go k delta t inv_slope acc
-      | nll_cond < nll_opt = Left theta_t
+      | nll_cond < nll_opt = trace (show (nll_cond, nll_opt)) $ Left theta_t
       | abs tau > tau_max  = Right acc
       | otherwise          = go (k-1) delta (t + inv_slope) inv_slope' (([tau], [theta_t], [delta_t]) <> acc) 
       where
@@ -145,15 +145,12 @@ getStatsFromModel :: Distribution -> Maybe Double -> Columns -> Column -> Fix SR
 getStatsFromModel dist mSErr xss ys tree theta = MkStats cov corr stdErr
   where
     nParams = fromIntegral $ LA.size theta
+    hess :: LA.Matrix Double
     hess    = LA.fromLists $ hessianNLL dist mSErr xss ys tree theta
-    {--
-    hs      = case someNatVal nParams of
-               Just (SomeNat (_ :: Proxy n)) -> case (LAS.create hess) :: Maybe (LAS.L n n) of
-                 Nothing -> error "incorrect dimensions"
-                 Just m  -> m :: LAS.L n n
-               Nothing -> error "wat?"
-    --}
-    cov     = LA.inv hess -- hs LAS.<> (LAS.tr hs) -- LA.cholSolve (hs LA.<> (LA.tr hs)) (LA.ident nParams) -- LA.inv $ LA.fromLists $ hessianNLL dist mSErr xss ys tree theta
+    cov     = case LA.mbChol (LA.sym hess) of
+                Nothing -> error "Hessian of the model is not positive definite"
+                Just m  -> LA.cholSolve m (LA.ident nParams)
+    
     stdErr = sqrt $ LA.takeDiag cov
     corr   = cov / LA.outer stdErr stdErr
 

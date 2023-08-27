@@ -194,9 +194,13 @@ printResultsScreen f g exprs = do
       \(ix, e) -> case e of
                    Left  err -> do putStrLn $ "invalid expression: " <> err
                    Right ex  -> do let (ex', sts) = f ix ex
-                                       (sts', cis, pis1, pis2, pis3) = g ex
+                                       (sts', cis, pis1, pis2, pis3) = g ex'
                                    -- mapM_ putStrLn sts
                                    print sts'
+                                   mapM_ print cis
+                                   mapM_ print pis1
+                                   mapM_ print pis2
+                                   mapM_ print pis3
 
 getInfoFromTree fname fTheta optimizer fisherFun dist' msErr' xTr yTr xVal yVal xTe yTe ix tree = (t', statsStr)
   where
@@ -239,8 +243,9 @@ getStatsFromTree optimizer fisherFun dist' msErr' xTr yTr xVal yVal xTe yTe tree
     theta'         = VS.fromList theta
     stats'         = getStatsFromModel dist' msErr' xTr yTr tree' theta'
     predFun        = predict dist' tree' theta'
-    jacFun xss     = LA.toRows . LA.fromColumns $ snd $ reverseModeUnique xss theta' VS.singleton tree' 
-    cis            = paramCI (Laplace stats') (LA.size yTr) theta' 0.05
+    jacFun xss     = LA.toRows . LA.fromColumns $ snd $ reverseModeUnique xss theta' VS.singleton tree'
+    profiles       = getAllProfiles dist' msErr' xTr yTr tree' theta' (_stdErr stats')
+    cis            = paramCI (Profile stats' profiles) (LA.size yTr) theta' 0.05
     pis_tr         = predictionCI (Laplace stats') predFun jacFun (const id) xTr tree' theta' 0.05 
     pis_val        = predictionCI (Laplace stats') predFun jacFun (const id) xVal tree' theta' 0.05 
     pis_te         = predictionCI (Laplace stats') predFun jacFun (const id) xTe tree' theta' 0.05 
