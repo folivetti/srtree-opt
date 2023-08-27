@@ -6,6 +6,7 @@ module Data.SRTree.Likelihoods
   , mse
   , rmse
   , nll
+  , predict
   , gradNLL
   , fisherNLL
   , getSErr
@@ -93,6 +94,12 @@ nll Poisson _ xss ys tree theta
   where
     yhat     = evalTree xss theta VS.singleton tree
     notValid = VS.any (<0)
+
+-- | Prediction for different distributions
+predict :: Distribution -> Fix SRTree -> VS.Vector Double -> Columns -> LA.Vector Double
+predict Gaussian  tree theta xss = evalTree xss theta VS.singleton tree
+predict Bernoulli tree theta xss = logistic $ evalTree xss theta VS.singleton tree
+predict Poisson   tree theta xss = exp $ evalTree xss theta VS.singleton tree
 
 -- | Gradient of the negative log-likelihood
 gradNLL :: Distribution -> Maybe Double -> Columns -> Column -> Fix SRTree -> VS.Vector Double -> VS.Vector Double

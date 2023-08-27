@@ -12,15 +12,15 @@ packages:
   original:
     hackage: hegg-0.3.0.0
 - completed:
-    commit: 7ce188bf5f1d752ae7da40a047c2dda5e75a64fe
+    commit: d551af74161953d1140d5d25b3916e8609e0cb01
     git: https://github.com/folivetti/srtree.git
     name: srtree
     pantry-tree:
-      sha256: 6c776accb4133c1faa22b669ffa279a999b65b2a6e8d489aa71b17740b0b7d15
+      sha256: 7f2691a23a89176b93887baebc0a4105e5fb921777ef8307856046c84b1a503f
       size: 2415
     version: 1.0.0.5
   original:
-    commit: 7ce188bf5f1d752ae7da40a047c2dda5e75a64fe
+    commit: d551af74161953d1140d5d25b3916e8609e0cb01
     git: https://github.com/folivetti/srtree.git
 - completed:
     commit: 29fcb0f10dc77d5fdeb28bf50d633cef332d329f

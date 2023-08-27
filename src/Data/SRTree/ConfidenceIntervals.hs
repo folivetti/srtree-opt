@@ -1,4 +1,4 @@
-{-# language ViewPatterns #-}
+{-# language ViewPatterns, ScopedTypeVariables #-}
 module Data.SRTree.ConfidenceIntervals where
 
 import qualified Numeric.LinearAlgebra as LA
@@ -6,13 +6,20 @@ import Statistics.Distribution hiding (Distribution)
 import Statistics.Distribution.StudentT
 import Statistics.Distribution.FDistribution
 import qualified Data.Vector.Storable as VS
+import qualified Data.Vector as V
 import Data.SRTree
+import Data.SRTree.Eval
 import Data.SRTree.Recursion ( cata )
 import Data.SRTree.AD
 import Data.SRTree.Likelihoods
 import Data.SRTree.Opt
 import Numeric.GSL.Interpolation
 import Data.List ( sortOn )
+import qualified Numeric.LinearAlgebra.Static as LAS
+import GHC.TypeLits
+import Data.Proxy
+
+import Debug.Trace ( trace )
 
 data CIType = Laplace BasicStats | Profile BasicStats [ProfileT]
 
@@ -50,19 +57,55 @@ paramCI (Profile stats profiles) nSamples theta alpha = zipWith3 CI (VS.toList t
     lows     = map (\p -> _tau2theta p (-t)) profiles
     highs    = map (\p -> _tau2theta p t) profiles
 
-predictionCI :: CIType -> Columns -> Column -> Columns -> Fix SRTree -> VS.Vector Double -> Double -> [CI]
-predictionCI (Laplace stats) xss_tr ys_tr xss tree theta alpha = zipWith3 CI (VS.toList yhat) lows highs
+-- predictionCI :: CIType -> Columns -> Column -> Columns -> Fix SRTree -> VS.Vector Double -> Double -> [CI]
+predictionCI (Laplace stats) predFun jacFun _ xss tree theta alpha = zipWith3 CI (VS.toList yhat) lows highs
   where
-    (yhat, LA.toRows . LA.fromColumns -> grad) = reverseModeUnique xss theta VS.singleton tree
-    t                  = quantile (studentT . fromIntegral $ LA.size yhat - k) (alpha / 2.0)
-    cov = _cov stats
-    k                  = VS.length theta
-    lows               = VS.toList $ VS.zipWith (-) yhat $ VS.map (*t) resStdErr
-    highs              = VS.toList $ VS.zipWith (+) yhat $ VS.map (*t) resStdErr
-    getResStdError row = sqrt $ LA.dot row $ LA.fromList $ map (LA.dot row . (cov LA.!)) [0 .. k-1]
-    resStdErr          = VS.fromList $ map getResStdError grad
+    yhat  = predFun xss
+    jac   = jacFun xss
+    t     = quantile (studentT . fromIntegral $ LA.size yhat - k) (alpha / 2.0)
+    cov   = _cov stats
+    k     = VS.length theta
+    lows  = VS.toList $ VS.zipWith (-) yhat $ VS.map (*t) resStdErr
+    highs = VS.toList $ VS.zipWith (+) yhat $ VS.map (*t) resStdErr
 
-predictionCI (Profile stats profiles) xss_tr ys_tr xss tree theta alpha = error "Prediction interval not implemented for profile-t"
+    getResStdError row = sqrt $ LA.dot row $ LA.fromList $ map (LA.dot row . (cov LA.!)) [0 .. k-1]
+    resStdErr          = VS.fromList $ map getResStdError jac
+
+{-
+predFun xss = predict tree theta xss
+jacFun  xss = LA.toRows . LA.fromColumns $ reverseModeUnique xss theta VS.singleton tree
+profFun theta = let stdErr_0 = (VS.! 0) $  _stdErr $ getStatsFromModel dist mSErr xss_tr ys_tr tree theta
+                 in _tau2theta $ getProfile dist mSErr xss_tr ys_tr tree theta stdErr_0 tau_max 0
+-}
+predictionCI (Profile _ _) predFun _ profFun xss tree theta alpha = zipWith f (VS.toList yhat) (VS.toList thetas0)
+  where
+    yhat = predFun xss
+
+    t       = quantile (studentT . fromIntegral $ LA.size yhat - VS.length theta) (alpha / 2.0)
+    thetas0 = calcTheta0 xss yhat theta VS.singleton tree
+    tau_max = sqrt $ quantile (fDistribution (VS.length theta) (LA.size yhat - VS.length theta)) (1 - 0.01)
+    
+    f yh t0 = let spline = profFun (theta VS.// [(0, t0)])
+               in CI yh (spline (-t)) (spline t)
+
+calcTheta0 xss ys theta f tree = case cata alg tree of
+                                              Left g -> g ys
+                                              Right v -> error "No theta0?"
+  where
+    alg (Var ix)     = Right $ xss V.! ix
+    alg (Param 0)    = Left id
+    alg (Param ix)   = Right $ f $ theta VS.! ix
+    alg (Const c)    = Right $ f c
+    alg (Uni g t)    = case t of
+                         Left f  -> Left $ f . evalInverse g
+                         Right v -> Right $ evalFun g v
+    alg (Bin op l r) = case l of
+                         Left f   -> case r of
+                                       Left  g -> error "This shouldn't happen!"
+                                       Right v -> Left $ f . invright op v
+                         Right vl -> case r of
+                                       Left  g -> Left $ g . invleft op vl
+                                       Right vr -> Right $ evalOp op vl vr
 
 getAllProfiles dist mSErr xss ys tree theta stdErr = reverse (getAll 0 [])
   where 
@@ -101,7 +144,16 @@ getProfile dist mSErr xss ys tree theta stdErr_i tau_max ix =
 getStatsFromModel :: Distribution -> Maybe Double -> Columns -> Column -> Fix SRTree -> VS.Vector Double -> BasicStats
 getStatsFromModel dist mSErr xss ys tree theta = MkStats cov corr stdErr
   where
-    cov    = LA.inv $ LA.fromLists $ hessianNLL dist mSErr xss ys tree theta
+    nParams = fromIntegral $ LA.size theta
+    hess    = LA.fromLists $ hessianNLL dist mSErr xss ys tree theta
+    {--
+    hs      = case someNatVal nParams of
+               Just (SomeNat (_ :: Proxy n)) -> case (LAS.create hess) :: Maybe (LAS.L n n) of
+                 Nothing -> error "incorrect dimensions"
+                 Just m  -> m :: LAS.L n n
+               Nothing -> error "wat?"
+    --}
+    cov     = LA.inv hess -- hs LAS.<> (LAS.tr hs) -- LA.cholSolve (hs LA.<> (LA.tr hs)) (LA.ident nParams) -- LA.inv $ LA.fromLists $ hessianNLL dist mSErr xss ys tree theta
     stdErr = sqrt $ LA.takeDiag cov
     corr   = cov / LA.outer stdErr stdErr
 
