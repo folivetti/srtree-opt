@@ -19,7 +19,7 @@ import qualified Data.Vector as V
 import qualified Data.Vector.Storable as VS
 import qualified Numeric.LinearAlgebra as LA
 import Data.SRTree (SRTree (..), Fix(..), floatConstsToParam)
-import Data.SRTree.AD ( reverseModeUnique )
+import Data.SRTree.AD -- ( reverseModeUnique )
 import Data.SRTree.Eval ( evalTree )
 import Data.SRTree.Derivative ( deriveByParam )
 import Data.Maybe ( fromMaybe )

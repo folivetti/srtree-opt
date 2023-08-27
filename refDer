@@ -1,0 +1,3 @@
+stack run -- -f operon -i poisson.operon -d Poly-10-noise.csv --hasheader --report --niter 500 --distribution Gaussian
+[-46.65216829076089,-46.41241476555125,-36.838770158590826]
+[0.5986932170374667,1.4956298045858227,3.031708469666239]

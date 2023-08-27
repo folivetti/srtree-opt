@@ -35,12 +35,12 @@ leastSquares niter xss ys tree t0
   | n > m      = (t0, 0)
   | otherwise  = (t_opt, iters path)
   where
-    (t_opt, path) = nlFitting LevenbergMarquardtScaled 1e-6 1e-6 niter model jacob t0
+    (t_opt, path) = nlFitting LevenbergMarquardtScaled 1e-12 1e-12 niter model jacob t0
     iters         = fst . size  
     n             = VS.length t0
     m             = VS.length ys
     model theta   = subtract ys $ evalTree xss theta VS.singleton tree
-    jacob theta   = fromColumns . snd $ reverseModeUnique xss theta VS.singleton tree
+    jacob theta   = negate . fromColumns . snd $ reverseModeUnique xss theta VS.singleton tree
 
 minimizeNLL :: Distribution -> Maybe Double -> Int -> Columns -> Column -> Fix SRTree -> VS.Vector Double -> (VS.Vector Double, Int)
 minimizeNLL dist msErr niter xss ys tree t0
@@ -49,7 +49,7 @@ minimizeNLL dist msErr niter xss ys tree t0
   | n > m      = (t0, 0)
   | otherwise  = (t_opt, iters path)
   where
-    (t_opt, path) = minimizeVD VectorBFGS2 1e-6 niter 1e-3 1e-6 model jacob t0
+    (t_opt, path) = minimizeVD VectorBFGS2 1e-20 niter 0.1 0.01 model jacob t0
 
     iters = fst . size   
     n     = VS.length t0

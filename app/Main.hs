@@ -195,12 +195,15 @@ printResultsScreen f g exprs = do
                    Left  err -> do putStrLn $ "invalid expression: " <> err
                    Right ex  -> do let (ex', sts) = f ix ex
                                        (sts', cis, pis1, pis2, pis3) = g ex'
-                                   -- mapM_ putStrLn sts
+                                   putStrLn (sts !! 5) 
+                                   putStrLn (sts !! 7) 
+                                   putStrLn (sts !! 10) 
+                                   putStrLn (sts !! 17) 
                                    print sts'
                                    mapM_ print cis
-                                   mapM_ print pis1
-                                   mapM_ print pis2
-                                   mapM_ print pis3
+                                   -- mapM_ print pis1
+                                   -- mapM_ print pis2
+                                   -- mapM_ print pis3
 
 getInfoFromTree fname fTheta optimizer fisherFun dist' msErr' xTr yTr xVal yVal xTe yTe ix tree = (t', statsStr)
   where
