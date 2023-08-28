@@ -65,6 +65,7 @@ paramCI (Profile stats profiles) nSamples theta alpha = zipWith3 CI (VS.toList t
     highs    = map (\p -> _tau2theta p t) profiles
 
 -- predictionCI :: CIType -> Columns -> Column -> Columns -> Fix SRTree -> VS.Vector Double -> Double -> [CI]
+predictionCI :: CIType -> (Columns -> Column) -> (Columns -> [VS.Vector Double]) -> (VS.Vector Double -> Fix SRTree -> Double -> Double) -> Columns -> Fix SRTree -> VS.Vector Double -> Double -> [CI]
 predictionCI (Laplace stats) predFun jacFun _ xss tree theta alpha = zipWith3 CI (VS.toList yhat) lows highs
   where
     yhat  = predFun xss
@@ -78,25 +79,46 @@ predictionCI (Laplace stats) predFun jacFun _ xss tree theta alpha = zipWith3 CI
     getResStdError row = sqrt $ LA.dot row $ LA.fromList $ map (LA.dot row . (cov LA.!)) [0 .. k-1]
     resStdErr          = VS.fromList $ map getResStdError jac
 
-predictionCI (Profile _ _) predFun _ profFun xss tree theta alpha = zipWith f (VS.toList yhat) (VS.toList thetas0)
+predictionCI (Profile _ _) predFun _ profFun xss tree theta alpha = zipWith f (VS.toList yhat) xss'
   where
     yhat = predFun xss
 
     t       = quantile (studentT . fromIntegral $ LA.size yhat - VS.length theta) (alpha / 2.0)
-    thetas0 = calcTheta0 xss yhat theta VS.singleton tree
-    tau_max = sqrt $ quantile (fDistribution (VS.length theta) (LA.size yhat - VS.length theta)) (1 - 0.01)
+    theta0  = calcTheta0 tree
+    xss'    = LA.toRows $ LA.fromColumns $ V.toList xss
     
-    f yh t0 = let spline = profFun (theta VS.// [(0, t0)])
-               in CI yh (spline (-t)) (spline t)
+    f yh xs = let t' = replaceParam0 tree $ evalVar xs theta0
+                  spline = profFun theta t'
+               in CI yh (spline t) (spline (-t))
 
-calcTheta0 xss ys theta f tree = case cata alg tree of
-                                              Left g -> g ys
-                                              Right v -> error "No theta0?"
+replaceParam0 :: Fix SRTree -> Fix SRTree -> Fix SRTree
+replaceParam0 tree t0 = cata alg tree
   where
-    alg (Var ix)     = Right $ xss V.! ix
+    alg (Var ix)     = Fix $ Var ix
+    alg (Param 0)    = t0
+    alg (Param ix)   = Fix $ Param ix
+    alg (Const c)    = Fix $ Const c
+    alg (Uni g t)    = Fix $ Uni g t
+    alg (Bin op l r) = Fix $ Bin op l r
+
+evalVar :: VS.Vector Double -> Fix SRTree -> Fix SRTree
+evalVar xs = cata alg 
+  where
+    alg (Var ix)     = Fix $ Const (xs VS.! ix)
+    alg (Param ix)   = Fix $ Param ix
+    alg (Const c)    = Fix $ Const c
+    alg (Uni g t)    = Fix $ Uni g t
+    alg (Bin op l r) = Fix $ Bin op l r
+
+calcTheta0 :: Fix SRTree -> Fix SRTree
+calcTheta0 tree = case cata alg tree of
+                         Left g -> g (Fix $ Param 0)
+                         Right v -> error "No theta0?"
+  where
+    alg (Var ix)     = Right $ Fix $ Var ix
     alg (Param 0)    = Left id
-    alg (Param ix)   = Right $ f $ theta VS.! ix
-    alg (Const c)    = Right $ f c
+    alg (Param ix)   = Right $ Fix $ Param ix
+    alg (Const c)    = Right $ Fix $ Const c
     alg (Uni g t)    = case t of
                          Left f  -> Left $ f . evalInverse g
                          Right v -> Right $ evalFun g v

@@ -107,7 +107,9 @@ gradNLL Gaussian msErr xss ys tree theta = VS.fromList [VS.sum (g * err) / sErr 
   where
     m            = fromIntegral $ VS.length ys
     p            = fromIntegral $ VS.length theta
-    (yhat, grad) = reverseModeUnique xss theta VS.singleton tree
+    -- (yhat, grad) = reverseModeUnique xss theta VS.singleton tree
+    yhat         = predict Gaussian tree theta xss
+    grad         = forwardMode xss theta VS.singleton tree
     err          = yhat - ys
     ssr          = sse xss ys tree theta
     est          = sqrt $ ssr / (m - p)
@@ -117,14 +119,16 @@ gradNLL Bernoulli _ xss ys tree theta
   | notValid ys = error "For Bernoulli distribution the output must be either 0 or 1."
   | otherwise   = VS.fromList [VS.sum $ (logistic yhat - ys) * g | g <- grad]
   where
-    (yhat, grad) = reverseModeUnique xss theta VS.singleton tree
+    yhat         = predict Bernoulli tree theta xss
+    grad         = forwardMode xss theta VS.singleton tree
     notValid     = VS.any (\x -> x /= 0 && x /= 1)
 
 gradNLL Poisson _ xss ys tree theta
   | notValid ys = error "For Poisson distribution the output must be non-negative."
   | otherwise   = VS.fromList [negate . VS.sum $ g * (ys - exp yhat) | g <- grad]
   where
-    (yhat, grad) = reverseModeUnique xss theta VS.singleton tree
+    yhat         = predict Poisson tree theta xss
+    grad         = forwardMode xss theta VS.singleton tree
     notValid     = VS.any (<0)
 
 -- | Fisher information of negative log-likelihood

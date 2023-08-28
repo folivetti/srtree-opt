@@ -8,7 +8,7 @@ import Data.Char (toLower, toUpper)
 import Data.List (intercalate)
 import Data.Maybe ( fromMaybe )
 import Data.SRTree ( SRTree, Fix (..), floatConstsToParam, paramsToConst, countNodes )
-import Data.SRTree.Opt (optimize, sse, Distribution (..), nll)
+import Data.SRTree.Opt (optimize, sse, Distribution (..), nll, minimizeNLLWithFixedParam)
 import Data.SRTree.AD
 import Data.SRTree.Likelihoods
 import Data.SRTree.ModelSelection
@@ -24,6 +24,8 @@ import Data.Vector.Storable qualified as VS
 import System.Random
 import Data.Random.Normal ( normals )
 import qualified Numeric.LinearAlgebra as LA 
+import Statistics.Distribution.FDistribution
+import Statistics.Distribution ( quantile )
 
 import Debug.Trace ( trace )
 
@@ -283,13 +285,19 @@ getStatsFromTree useProf alpha optimizer fisherFun dist' msErr' xTr yTr xVal yVa
     theta'         = VS.fromList theta
     stats'         = getStatsFromModel dist' msErr' xTr yTr tree' theta'
     predFun        = predict dist' tree' theta'
+    tau_max        = sqrt $ quantile (fDistribution (length theta) (LA.size yTr - length theta)) (1 - 0.01)
+    fromEither (Right x) = x
+    profFun th t   = let (thOpt, _) = minimizeNLLWithFixedParam dist' msErr' 10 xTr yTr tree' 0 th
+                      in case getProfile dist' msErr' xTr yTr t th (_stdErr stats' VS.! 0) tau_max 0 of
+                           Left th' -> profFun th' t
+                           Right p  -> _tau2theta p
     jacFun xss     = LA.toRows . LA.fromColumns $ snd $ reverseModeUnique xss theta' VS.singleton tree'
     profiles       = getAllProfiles dist' msErr' xTr yTr tree' theta' (_stdErr stats')
     method         = if useProf then (Profile stats' profiles) else (Laplace stats') 
     cis            = paramCI method (LA.size yTr) theta' alpha
-    pis_tr         = predictionCI method predFun jacFun (const id) xTr tree' theta' alpha
-    pis_val        = predictionCI method predFun jacFun (const id) xVal tree' theta' alpha
-    pis_te         = predictionCI method predFun jacFun (const id) xTe tree' theta' alpha
+    pis_tr         = predictionCI method predFun jacFun profFun xTr tree' theta' alpha
+    pis_val        = predictionCI method predFun jacFun profFun xVal tree' theta' alpha
+    pis_te         = predictionCI method predFun jacFun profFun xTe tree' theta' alpha
 
 --toCSV :: IO ()
 toCSV args = do
