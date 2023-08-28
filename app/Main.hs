@@ -79,6 +79,7 @@ data Args = Args
       , rseed       :: Int
       , toScreen    :: Bool
       , useProfile  :: Bool
+      , alpha       :: Double
     } deriving Show
 
 opt :: Parser Args
@@ -160,6 +161,12 @@ opt = Args
    <*> switch
         ( long "profile"
         <> help "If set, it will use profile likelihood to calculate the CIs." )
+   <*> option auto
+       ( long "alpha"
+       <> metavar "ALPHA"
+       <> showDefault
+       <> value 0.05
+       <> help "Significance level for confidence intervals.")
 
 openWriteWithDefault :: Handle -> String -> IO Handle
 openWriteWithDefault dflt fname =
@@ -191,19 +198,49 @@ printResults fname sname f exprs = do
 -- printResultsScreen :: String -> String -> (Int -> Fix SRTree -> (Fix SRTree, [String])) -> [Either String (Fix SRTree)] -> IO ()
 printResultsScreen f g exprs = do
   forM_ (zip [0..] exprs) $ 
-      \(ix, e) -> case e of
-                   Left  err -> do putStrLn $ "invalid expression: " <> err
-                   Right ex  -> do let (ex', sts) = f ix ex
-                                       (sts', cis, pis1, pis2, pis3) = g ex'
-                                   putStrLn (sts !! 5) 
-                                   putStrLn (sts !! 7) 
-                                   putStrLn (sts !! 10) 
-                                   putStrLn (sts !! 17) 
-                                   print sts'
-                                   mapM_ print cis
-                                   -- mapM_ print pis1
-                                   -- mapM_ print pis2
-                                   -- mapM_ print pis3
+    \(ix, e) -> 
+        case e of
+          Left  err -> do putStrLn $ "invalid expression: " <> err
+          Right ex  -> do let (ex', sts) = f ix ex
+                              (sts', cis, pis1, pis2, pis3) = g ex'
+                              nplaces = 4
+                              decim :: Int -> Double -> Double
+                              decim n x = (fromIntegral . round) (x * 10^n) / 10^n
+                              sdecim n = show . decim n . read
+                              [_,fname,expr,nNodes,nParams,params,iters,_,_,_,sseTr,sseVal,sseTe,bicTr,aicTr,mdlTr,mdlFreqTr,nnlTr,nnlVal,nnlTe,cc,cp,fish] = sts
+                          putStrLn $ "=================== EXPR " <> show ix <> " =================="
+                          putStrLn expr
+                          putStrLn "\n---------General stats:---------\n"
+                          putStrLn $ "Number of nodes: " <> nNodes
+                          putStrLn $ "Number of params: " <> nParams
+                          putStrLn $ "theta = [" <> params <> "]"
+                          putStrLn "\n----------Performance:--------\n"
+                          putStrLn $ "SSE (train.): " <> sdecim nplaces sseTr
+                          putStrLn $ "SSE (val.): " <> sdecim nplaces sseVal
+                          putStrLn $ "SSE (test): " <> sdecim nplaces sseTe
+                          putStrLn $ "NegLogLiklihood (train.): " <> sdecim nplaces nnlTr
+                          putStrLn $ "NegLogLiklihood (val.): " <> sdecim nplaces nnlVal
+                          putStrLn $ "NegLogLiklihood (test): " <> sdecim nplaces nnlTe
+                          putStrLn "\n------Selection criteria:-----\n"
+                          putStrLn $ "BIC: " <> sdecim nplaces bicTr
+                          putStrLn $ "AIC: " <> sdecim nplaces aicTr
+                          putStrLn $ "MDL: " <> sdecim nplaces mdlTr
+                          putStrLn $ "MDL (freq.): " <> sdecim nplaces mdlFreqTr 
+                          putStrLn $ "Functional complexity: " <> sdecim nplaces cc
+                          putStrLn $ "Parameter complexity: " <> sdecim nplaces cp
+                          putStrLn $ "\n---------Uncertainties:----------\n"
+                          putStrLn $ "Correlation of parameters: " 
+                          putStrLn $ LA.dispf 2 (_corr sts')
+                          putStrLn $ "Std. Err.: " <> show (LA.cmap (decim nplaces) (_stdErr sts'))
+                          putStrLn "\nConfidence intervals:\n\nlower <= val <= upper"
+                          mapM_ (printCI nplaces) cis
+                          putStrLn "\nConfidence intervals (predictions training):\n\nlower <= val <= upper"
+                          mapM_ (printCI nplaces) pis1
+                          putStrLn "\nConfidence intervals (predictions validation):\n\nlower <= val <= upper"
+                          mapM_ (printCI nplaces) pis2
+                          putStrLn "\nConfidence intervals (predictions test):\n\nlower <= val <= upper"
+                          mapM_ (printCI nplaces) pis3
+                          putStrLn "============================================================="
 
 getInfoFromTree fname fTheta optimizer fisherFun dist' msErr' xTr yTr xVal yVal xTe yTe ix tree = (t', statsStr)
   where
@@ -240,7 +277,7 @@ getInfoFromTree fname fTheta optimizer fisherFun dist' msErr' xTr yTr xVal yVal 
                , fisher
                ]
 
-getStatsFromTree optimizer fisherFun dist' msErr' xTr yTr xVal yVal xTe yTe tree = (stats', cis, pis_tr, pis_val, pis_te)
+getStatsFromTree useProf alpha optimizer fisherFun dist' msErr' xTr yTr xVal yVal xTe yTe tree = (stats', cis, pis_tr, pis_val, pis_te)
   where
     (tree', theta) = floatConstsToParam tree
     theta'         = VS.fromList theta
@@ -248,10 +285,11 @@ getStatsFromTree optimizer fisherFun dist' msErr' xTr yTr xVal yVal xTe yTe tree
     predFun        = predict dist' tree' theta'
     jacFun xss     = LA.toRows . LA.fromColumns $ snd $ reverseModeUnique xss theta' VS.singleton tree'
     profiles       = getAllProfiles dist' msErr' xTr yTr tree' theta' (_stdErr stats')
-    cis            = paramCI (Profile stats' profiles) (LA.size yTr) theta' 0.05
-    pis_tr         = predictionCI (Laplace stats') predFun jacFun (const id) xTr tree' theta' 0.05 
-    pis_val        = predictionCI (Laplace stats') predFun jacFun (const id) xVal tree' theta' 0.05 
-    pis_te         = predictionCI (Laplace stats') predFun jacFun (const id) xTe tree' theta' 0.05 
+    method         = if useProf then (Profile stats' profiles) else (Laplace stats') 
+    cis            = paramCI method (LA.size yTr) theta' alpha
+    pis_tr         = predictionCI method predFun jacFun (const id) xTr tree' theta' alpha
+    pis_val        = predictionCI method predFun jacFun (const id) xVal tree' theta' alpha
+    pis_te         = predictionCI method predFun jacFun (const id) xTe tree' theta' alpha
 
 --toCSV :: IO ()
 toCSV args = do
@@ -292,7 +330,7 @@ reportResults args = do
                      else t0
       fisherFun = fisherNLL dist' (msErr args) xTr yTr
       genStats  = getInfoFromTree (infile args) fTheta optimizer fisherFun dist' (msErr args) xTr yTr xVal yVal xTe yTe
-      genCIS = getStatsFromTree optimizer fisherFun dist' (msErr args) xTr yTr xVal yVal xTe yTe
+      genCIS = getStatsFromTree (useProfile args) (alpha args) optimizer fisherFun dist' (msErr args) xTr yTr xVal yVal xTe yTe
 
   withInput (infile args) (from args) varnames False (simpl args)
     >>= printResultsScreen genStats genCIS

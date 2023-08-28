@@ -40,8 +40,15 @@ data ProfileT = ProfileT { _taus      :: LA.Vector Double
                          , _theta2tau :: Double -> Double
                          }
 
+showCI :: Int -> CI -> String
+showCI n (CI x l h) = show (rnd l) <> " <= " <> show (rnd x) <> " <= " <> show (rnd h)
+  where
+      rnd = (/10^n) . (fromIntegral . round) . (*10^n)
+printCI :: Int -> CI -> IO ()
+printCI n = putStrLn . showCI n
+
 paramCI :: CIType -> Int -> VS.Vector Double -> Double -> [CI]
-paramCI (Laplace stats) nSamples theta alpha = trace (show t) $ zipWith3 CI (VS.toList theta) lows highs
+paramCI (Laplace stats) nSamples theta alpha = zipWith3 CI (VS.toList theta) lows highs
   where
     k      = VS.length theta
     t      = quantile (studentT . fromIntegral $ nSamples - k) (1 - alpha / 2.0)
@@ -62,7 +69,7 @@ predictionCI (Laplace stats) predFun jacFun _ xss tree theta alpha = zipWith3 CI
   where
     yhat  = predFun xss
     jac   = jacFun xss
-    t     = quantile (studentT . fromIntegral $ LA.size yhat - k) (alpha / 2.0)
+    t     = quantile (studentT . fromIntegral $ LA.size yhat - k) (1 - alpha / 2.0)
     cov   = _cov stats
     k     = VS.length theta
     lows  = VS.toList $ VS.zipWith (-) yhat $ VS.map (*t) resStdErr
@@ -71,12 +78,6 @@ predictionCI (Laplace stats) predFun jacFun _ xss tree theta alpha = zipWith3 CI
     getResStdError row = sqrt $ LA.dot row $ LA.fromList $ map (LA.dot row . (cov LA.!)) [0 .. k-1]
     resStdErr          = VS.fromList $ map getResStdError jac
 
-{-
-predFun xss = predict tree theta xss
-jacFun  xss = LA.toRows . LA.fromColumns $ reverseModeUnique xss theta VS.singleton tree
-profFun theta = let stdErr_0 = (VS.! 0) $  _stdErr $ getStatsFromModel dist mSErr xss_tr ys_tr tree theta
-                 in _tau2theta $ getProfile dist mSErr xss_tr ys_tr tree theta stdErr_0 tau_max 0
--}
 predictionCI (Profile _ _) predFun _ profFun xss tree theta alpha = zipWith f (VS.toList yhat) (VS.toList thetas0)
   where
     yhat = predFun xss
@@ -115,7 +116,7 @@ getAllProfiles dist mSErr xss ys tree theta stdErr = reverse (getAll 0 [])
 
     getAll ix acc | ix == nParams = acc
                   | otherwise     = case profFun ix of
-                                      Left t  -> trace ("restart" <> show t) $ getAllProfiles dist mSErr xss ys tree t stdErr
+                                      Left t  -> getAllProfiles dist mSErr xss ys tree t stdErr
                                       Right p -> getAll (ix + 1) (p : acc)
 
 getProfile dist mSErr xss ys tree theta stdErr_i tau_max ix = 
@@ -123,12 +124,12 @@ getProfile dist mSErr xss ys tree theta stdErr_i tau_max ix =
      posDelta <- go 30  (stdErr_i / 8) 0 1 ([0], [theta], [0])
      let (LA.fromList -> taus, LA.fromRows -> thetas, LA.fromList -> deltas) = negDelta <> posDelta
          (tau2theta, theta2tau) = createSplines taus thetas stdErr_i ix
-     trace (show taus) $ pure $ ProfileT taus thetas deltas tau2theta theta2tau
+     pure $ ProfileT taus thetas deltas tau2theta theta2tau
   where
     nll_opt = nll dist mSErr xss ys tree theta
     go 0 _     _ _         acc = Right acc
     go k delta t inv_slope acc
-      | nll_cond < nll_opt = trace (show (nll_cond, nll_opt)) $ Left theta_t
+      | nll_cond < nll_opt = Left theta_t
       | abs tau > tau_max  = Right (([tau], [theta_t], [delta_t]) <> acc) 
       | otherwise          = go (k-1) delta (t + inv_slope) inv_slope' (([tau], [theta_t], [delta_t]) <> acc) 
       where
@@ -136,7 +137,7 @@ getProfile dist mSErr xss ys tree theta stdErr_i tau_max ix =
         inv_slope' = min 4.0 . max 0.0625 . abs $ (tau / (stdErr_i * zv))
         theta_t    = fst
                    $ minimizeNLLWithFixedParam dist mSErr 10 xss ys tree ix 
-                   $ theta VS.// [(ix, (theta VS.! ix) + delta * t)]
+                   $ theta VS.// [(ix, (theta VS.! ix) + delta * (t + inv_slope))]
         nll_cond   = nll dist mSErr xss ys tree theta_t
         tau        = signum delta * sqrt (2*nll_cond - 2*nll_opt)
         delta_t    = (nll_cond - nll_opt) / stdErr_i
@@ -160,12 +161,12 @@ createSplines taus thetas se ix
   | VS.length taus < 2 = (evaluate CSpline [(0, -se), (1, se)], evaluate CSpline [(-se, 0), (se, 1)])
   | otherwise          = (tau2theta, theta2tau)
   where
-    tau2theta = evaluate CSpline $ sortOnFirst taus (getRow ix thetas)
-    theta2tau = evaluate CSpline $ sortOnFirst (getRow ix thetas) taus
+    tau2theta = evaluate CSpline $ sortOnFirst taus (getCol ix thetas)
+    theta2tau = evaluate CSpline $ sortOnFirst (getCol ix thetas) taus
 
-getRow :: Int -> LA.Matrix Double -> LA.Vector Double
-getRow ix mtx = LA.flatten $ mtx LA.? [ix]
-{-# inline getRow #-}
+getCol :: Int -> LA.Matrix Double -> LA.Vector Double
+getCol ix mtx = LA.flatten $ mtx LA.¿ [ix]
+{-# inline getCol #-}
 
 sortOnFirst :: VS.Vector Double -> VS.Vector Double -> [(Double, Double)]
 sortOnFirst xs ys = sortOn fst $ zip (VS.toList xs) (VS.toList ys)
@@ -190,8 +191,8 @@ approximateContour nParams nPoints profs ix1 ix2 alpha = go 0
 
     -- calculate the spline for A-D
     tauScale = sqrt (fromIntegral nParams * quantile (fDistribution nParams (nPoints - nParams)) (1 - alpha))
-    splineG1 = splinesSketches tauScale (_taus prof1) (getRow ix2 (_thetas prof1)) theta2tau2
-    splineG2 = splinesSketches tauScale (_taus prof2) (getRow ix1 (_thetas prof2)) theta2tau1
+    splineG1 = splinesSketches tauScale (_taus prof1) (getCol ix2 (_thetas prof1)) theta2tau2
+    splineG2 = splinesSketches tauScale (_taus prof2) (getCol ix1 (_thetas prof2)) theta2tau1
     angles   = [ (0, splineG1 1), (splineG2 1, 0), (pi, splineG1 (-1)), (splineG2 (-1), pi) ]
     splineAD = evaluate CSpline points
 
