@@ -1,0 +1,112 @@
+{-# language BlockArguments #-}
+module IO where
+
+import System.IO ( hClose, hPutStrLn, openFile, stderr, stdout, IOMode(WriteMode), Handle )
+import Numeric.LinearAlgebra ( dispf, cmap )
+import Data.List ( intercalate )
+import Control.Monad ( unless, forM_ )
+
+import Data.SRTree ( SRTree, Fix (..) )
+import Data.SRTree.ConfidenceIntervals
+import qualified Data.SRTree.Print as P
+
+import Args
+import Report
+
+csvHeader :: String
+csvHeader = intercalate "," (basicFields <> optFields <> modelFields)
+{-# inline csvHeader #-}
+
+openWriteWithDefault :: Handle -> String -> IO Handle
+openWriteWithDefault dflt fname =
+    if null fname
+       then pure dflt
+       else openFile fname WriteMode
+{-# INLINE openWriteWithDefault #-}
+
+processTree args seed dset tree ix = (basic, sseOrig, sseOpt, info, cis)
+  where
+    basic   = getBasicStats args seed dset tree ix
+    sseOrig = getSSE dset tree
+    sseOpt  = getSSE dset (_expr basic)
+    info    = getInfo args dset tree
+    cis     = getCI args dset basic (alpha args)
+
+--printResults :: String -> (Int -> Fix SRTree -> (Fix SRTree, [String])) -> [Either String (Fix SRTree)] -> IO ()
+printResults args seed dset exprs = do
+  hStat <- openWriteWithDefault stdout (outfile args)
+  hPutStrLn hStat csvHeader 
+  forM_ (zip [0..] exprs) 
+     \(ix, tree) -> 
+         case tree of
+           Left  err -> hPutStrLn stderr ("invalid expression: " <> err)
+           Right t   -> let treeData = processTree args seed dset t ix
+                         in hPutStrLn hStat (toCsv treeData)
+  unless (null (outfile args)) (hClose hStat)
+
+toCsv (basic, sseOrig, sseOpt, info, _) = intercalate "," (sBasic <> sSSEOrig <> sSSEOpt <> sInfo)
+  where
+    sBasic    = [ show (_index basic), show (_fname basic), P.showExpr (_expr basic)
+                , show (_nNodes basic), show (_nParams basic)
+                , intercalate ";" (map show (_params basic)) , show (_iters basic)
+                ]
+    sSSEOrig  = map (showF sseOrig) [_sseTr, _sseVal, _sseTe]
+    sSSEOpt   = map (showF sseOpt)  [_sseTr, _sseVal, _sseTe]
+    sInfo     = map (showF info) [_bic, _aic, _mdl, _mdlFreq, _nllTr, _nllVal, _nllTe, _cc, _cp]
+             <> [intercalate ";" (map show (_fisher info))]
+    showF p f = show (f p)
+
+-- printResultsScreen :: String -> String -> (Int -> Fix SRTree -> (Fix SRTree, [String])) -> [Either String (Fix SRTree)] -> IO ()
+printResultsScreen args seed dset exprs = do
+  forM_ (zip [0..] exprs) 
+    \(ix, tree) -> 
+        case tree of
+          Left  err -> do putStrLn ("invalid expression: " <> err)
+          Right t   -> let treeData = processTree args seed dset t ix
+                        in toScreen ix treeData
+  where
+    decim :: Int -> Double -> Double
+    decim n x = (fromIntegral . round) (x * 10^n) / 10^n
+    sdecim n  = show . decim n
+    nplaces   = 4
+
+    toScreen ix (basic, sseOrig, sseOpt, info, (sts, cis, pis_tr, pis_val, pis_te)) =
+      do putStrLn $ "=================== EXPR " <> show ix <> " =================="
+         putStrLn $ P.showExpr (_expr basic)
+
+         putStrLn "\n---------General stats:---------\n"
+         putStrLn $ "Number of nodes: " <> show (_nNodes basic)
+         putStrLn $ "Number of params: " <> show (_nParams basic)
+         putStrLn $ "theta = " <> show (_params basic)
+
+         putStrLn "\n----------Performance:--------\n"
+         putStrLn $ "SSE (train.): " <> sdecim nplaces (_sseTr sseOpt)
+         putStrLn $ "SSE (val.): " <> sdecim nplaces (_sseVal sseOpt)
+         putStrLn $ "SSE (test): " <> sdecim nplaces (_sseTe sseOpt)
+         putStrLn $ "NegLogLiklihood (train.): " <> sdecim nplaces (_nllTr info)
+         putStrLn $ "NegLogLiklihood (val.): " <> sdecim nplaces (_nllVal info)
+         putStrLn $ "NegLogLiklihood (test): " <> sdecim nplaces (_nllTe info)
+
+         putStrLn "\n------Selection criteria:-----\n"
+         putStrLn $ "BIC: " <> sdecim nplaces (_bic info)
+         putStrLn $ "AIC: " <> sdecim nplaces (_aic info)
+         putStrLn $ "MDL: " <> sdecim nplaces (_mdl info)
+         putStrLn $ "MDL (freq.): " <> sdecim nplaces (_mdlFreq info)
+         putStrLn $ "Functional complexity: " <> sdecim nplaces (_cc info)
+         putStrLn $ "Parameter complexity: " <> sdecim nplaces (_cp info)
+
+         putStrLn $ "\n---------Uncertainties:----------\n"
+         putStrLn $ "Correlation of parameters: " 
+         putStrLn $ dispf 2 (_corr sts)
+         putStrLn $ "Std. Err.: " <> show (cmap (decim nplaces) (_stdErr sts))
+         putStrLn "\nConfidence intervals:\n\nlower <= val <= upper"
+         mapM_ (printCI nplaces) cis
+         putStrLn "\nConfidence intervals (predictions training):\n\nlower <= val <= upper"
+         mapM_ (printCI nplaces) pis_tr
+         unless (null pis_val) do
+           putStrLn "\nConfidence intervals (predictions validation):\n\nlower <= val <= upper"
+           mapM_ (printCI nplaces) pis_val
+         unless (null pis_te) do
+           putStrLn "\nConfidence intervals (predictions test):\n\nlower <= val <= upper"
+           mapM_ (printCI nplaces) pis_te
+         putStrLn "============================================================="

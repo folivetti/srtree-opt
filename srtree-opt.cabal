@@ -56,6 +56,9 @@ library
 executable srtree-opt
   main-is: Main.hs
   other-modules:
+      Args
+      IO
+      Report
       Paths_srtree_opt
   hs-source-dirs:
       app
