@@ -5,25 +5,33 @@ import System.IO ( hClose, hPutStrLn, openFile, stderr, stdout, IOMode(WriteMode
 import Numeric.LinearAlgebra ( dispf, cmap )
 import Data.List ( intercalate )
 import Control.Monad ( unless, forM_ )
+import System.Random ( StdGen )
 
 import Data.SRTree ( SRTree, Fix (..) )
-import Data.SRTree.ConfidenceIntervals
+import Data.SRTree.ConfidenceIntervals ( printCI, BasicStats(_stdErr, _corr), CI )
 import qualified Data.SRTree.Print as P
 
-import Args
+import Args ( Args(outfile, alpha) )
 import Report
 
+-- Header of CSV file
 csvHeader :: String
 csvHeader = intercalate "," (basicFields <> optFields <> modelFields)
 {-# inline csvHeader #-}
 
+-- Open file if filename is not empty
 openWriteWithDefault :: Handle -> String -> IO Handle
-openWriteWithDefault dflt fname =
-    if null fname
-       then pure dflt
-       else openFile fname WriteMode
+openWriteWithDefault dflt ""    = pure dflt
+openWriteWithDefault _    fname = openFile fname WriteMode
 {-# INLINE openWriteWithDefault #-}
 
+-- procecss a single tree and return all the available stats
+processTree :: Args        -- command line arguments
+            -> StdGen      -- random number generator
+            -> Datasets    -- datasets
+            -> Fix SRTree  -- expression in tree format
+            -> Int         -- index of the parsed expression 
+            -> (BasicInfo, SSE, SSE, Info, (BasicStats, [CI], [CI], [CI], [CI]))
 processTree args seed dset tree ix = (basic, sseOrig, sseOpt, info, cis)
   where
     basic   = getBasicStats args seed dset tree ix
@@ -32,7 +40,8 @@ processTree args seed dset tree ix = (basic, sseOrig, sseOpt, info, cis)
     info    = getInfo args dset tree
     cis     = getCI args dset basic (alpha args)
 
---printResults :: String -> (Int -> Fix SRTree -> (Fix SRTree, [String])) -> [Either String (Fix SRTree)] -> IO ()
+-- print the results to a csv format (except CI)
+printResults :: Args -> StdGen -> Datasets -> [Either String (Fix SRTree)] -> IO ()
 printResults args seed dset exprs = do
   hStat <- openWriteWithDefault stdout (outfile args)
   hPutStrLn hStat csvHeader 
@@ -44,6 +53,8 @@ printResults args seed dset exprs = do
                          in hPutStrLn hStat (toCsv treeData)
   unless (null (outfile args)) (hClose hStat)
 
+-- change the stats into a string
+toCsv :: (BasicInfo, SSE, SSE, Info, e) -> String
 toCsv (basic, sseOrig, sseOpt, info, _) = intercalate "," (sBasic <> sSSEOrig <> sSSEOpt <> sInfo)
   where
     sBasic    = [ show (_index basic), show (_fname basic), P.showExpr (_expr basic)
@@ -56,21 +67,22 @@ toCsv (basic, sseOrig, sseOpt, info, _) = intercalate "," (sBasic <> sSSEOrig <>
              <> [intercalate ";" (map show (_fisher info))]
     showF p f = show (f p)
 
--- printResultsScreen :: String -> String -> (Int -> Fix SRTree -> (Fix SRTree, [String])) -> [Either String (Fix SRTree)] -> IO ()
+-- print the information on screen (including CIs)
+printResultsScreen :: Args -> StdGen -> Datasets -> [Either String (Fix SRTree)] -> IO ()
 printResultsScreen args seed dset exprs = do
   forM_ (zip [0..] exprs) 
     \(ix, tree) -> 
         case tree of
           Left  err -> do putStrLn ("invalid expression: " <> err)
           Right t   -> let treeData = processTree args seed dset t ix
-                        in toScreen ix treeData
+                        in printToScreen ix treeData
   where
     decim :: Int -> Double -> Double
-    decim n x = (fromIntegral . round) (x * 10^n) / 10^n
+    decim n x = (fromIntegral . (round :: Double -> Integer)) (x * 10^n) / 10^n
     sdecim n  = show . decim n
     nplaces   = 4
 
-    toScreen ix (basic, sseOrig, sseOpt, info, (sts, cis, pis_tr, pis_val, pis_te)) =
+    printToScreen ix (basic, _, sseOpt, info, (sts, cis, pis_tr, pis_val, pis_te)) =
       do putStrLn $ "=================== EXPR " <> show ix <> " =================="
          putStrLn $ P.showExpr (_expr basic)
 
@@ -95,8 +107,8 @@ printResultsScreen args seed dset exprs = do
          putStrLn $ "Functional complexity: " <> sdecim nplaces (_cc info)
          putStrLn $ "Parameter complexity: " <> sdecim nplaces (_cp info)
 
-         putStrLn $ "\n---------Uncertainties:----------\n"
-         putStrLn $ "Correlation of parameters: " 
+         putStrLn "\n---------Uncertainties:----------\n"
+         putStrLn "Correlation of parameters: " 
          putStrLn $ dispf 2 (_corr sts)
          putStrLn $ "Std. Err.: " <> show (cmap (decim nplaces) (_stdErr sts))
          putStrLn "\nConfidence intervals:\n\nlower <= val <= upper"

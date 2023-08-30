@@ -3,9 +3,14 @@ packages: .
 source-repository-package
     type: git
     location: https://github.com/folivetti/srtree-datasets.git
-    tag: a0c09b3c339471b086518c774dee4a00be37649b
+    tag: 29fcb0f10dc77d5fdeb28bf50d633cef332d329f
 
 source-repository-package
     type: git
     location: https://github.com/folivetti/pandoc-symreg.git
-    tag: 662cae4f4c4eece00fdb747176d24aeb63b97024
+    tag: 8b7ff7258ab3f21c605f218fad45f1d388177110
+
+source-repository-package
+    type: git
+    location: https://github.com/folivetti/srtree.git
+    tag: 5dc6fe3ff44156297823b912aa06984b0d7f5bce

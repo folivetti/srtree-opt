@@ -2,7 +2,7 @@ module Main (main) where
 
 import Options.Applicative
 import Text.ParseSR.IO ( withInput )
-import System.Random
+import System.Random ( getStdGen, mkStdGen )
 
 import Args
 import IO
