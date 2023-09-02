@@ -18,8 +18,8 @@ main = do
                else mkStdGen (rseed args)
   withInput (infile args) (from args) varnames False (simpl args)
     >>= if toScreen args
-          then printResultsScreen args seed dset
-          else printResults args seed dset
+          then printResultsScreen args seed dset  -- full report on screne
+          else printResults args seed dset -- csv file
   where    
     opts = info (opt <**> helper)
             ( fullDesc <> progDesc "Optimize the parameters of\
