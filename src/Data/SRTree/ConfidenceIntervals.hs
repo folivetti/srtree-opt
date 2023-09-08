@@ -133,7 +133,7 @@ calcTheta0 tree = case cata alg tree of
 getAllProfiles dist mSErr xss ys tree theta stdErr = reverse (getAll 0 [])
   where 
     nParams    = VS.length theta
-    tau_max    = sqrt $ quantile (fDistribution nParams (LA.size ys - nParams)) (1 - 0.01)
+    tau_max    = quantile (fDistribution nParams (LA.size ys - nParams)) (1 - 0.01)
     profFun ix = getProfile dist mSErr xss ys tree theta (stdErr LA.! ix) tau_max ix
 
     getAll ix acc | ix == nParams = acc
@@ -142,8 +142,8 @@ getAllProfiles dist mSErr xss ys tree theta stdErr = reverse (getAll 0 [])
                                       Right p -> getAll (ix + 1) (p : acc)
 
 getProfile dist mSErr xss ys tree theta stdErr_i tau_max ix = 
-  do negDelta <- go 300 (-stdErr_i / 8) 0 1 mempty
-     posDelta <- go 300  (stdErr_i / 8) 0 1 ([0], [theta], [0])
+  do negDelta <- go 500 (-stdErr_i / 8) 0 1 mempty
+     posDelta <- go 500  (stdErr_i / 8) 0 1 ([0], [theta], [0])
      let (LA.fromList -> taus, LA.fromRows -> thetas, LA.fromList -> deltas) = negDelta <> posDelta
          (tau2theta, theta2tau) = createSplines taus thetas stdErr_i ix
      pure $ ProfileT taus thetas deltas tau2theta theta2tau

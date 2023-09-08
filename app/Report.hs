@@ -165,7 +165,7 @@ getCI args dset basic alpha' = (stats', cis, pis_tr, pis_val, pis_te)
   where
     (tree, _)  = floatConstsToParam (_expr basic)
     theta      = _params basic
-    tau_max    = sqrt (quantile (fDistribution (_nParams basic) (LA.size yTr - _nParams basic)) (1 - 0.01))
+    tau_max    = (quantile (fDistribution (_nParams basic) (LA.size yTr - _nParams basic)) (1 - 0.01))
     (xTr, yTr) = (_xTr dset, _yTr dset)
     dist'      = fromMaybe Gaussian (dist args)
     msErr'     = msErr args
