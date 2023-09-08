@@ -142,8 +142,8 @@ getAllProfiles dist mSErr xss ys tree theta stdErr = reverse (getAll 0 [])
                                       Right p -> getAll (ix + 1) (p : acc)
 
 getProfile dist mSErr xss ys tree theta stdErr_i tau_max ix = 
-  do negDelta <- go 30 (-stdErr_i / 8) 0 1 mempty
-     posDelta <- go 30  (stdErr_i / 8) 0 1 ([0], [theta], [0])
+  do negDelta <- go 300 (-stdErr_i / 8) 0 1 mempty
+     posDelta <- go 300  (stdErr_i / 8) 0 1 ([0], [theta], [0])
      let (LA.fromList -> taus, LA.fromRows -> thetas, LA.fromList -> deltas) = negDelta <> posDelta
          (tau2theta, theta2tau) = createSplines taus thetas stdErr_i ix
      pure $ ProfileT taus thetas deltas tau2theta theta2tau
@@ -158,11 +158,11 @@ getProfile dist mSErr xss ys tree theta stdErr_i tau_max ix =
         zv         = gradNLL dist mSErr xss ys tree theta_t VS.! ix
         inv_slope' = min 4.0 . max 0.0625 . abs $ (tau / (stdErr_i * zv))
         theta_t    = fst
-                   $ minimizeNLLWithFixedParam dist mSErr 10 xss ys tree ix 
+                   $ minimizeNLLWithFixedParam dist mSErr 100 xss ys tree ix 
                    $ theta VS.// [(ix, (theta VS.! ix) + delta * (t + inv_slope))]
         nll_cond   = nll dist mSErr xss ys tree theta_t
         tau        = signum delta * sqrt (2*nll_cond - 2*nll_opt)
-        delta_t    = (nll_cond - nll_opt) / stdErr_i
+        delta_t    = (theta_t VS.! ix - theta VS.! ix) / stdErr_i
 
 getStatsFromModel :: Distribution -> Maybe Double -> Columns -> Column -> Fix SRTree -> VS.Vector Double -> BasicStats
 getStatsFromModel dist mSErr xss ys tree theta = MkStats cov corr stdErr

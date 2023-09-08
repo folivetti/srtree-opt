@@ -35,7 +35,7 @@ leastSquares niter xss ys tree t0
   | n > m      = (t0, 0)
   | otherwise  = (t_opt, iters path)
   where
-    (t_opt, path) = nlFitting LevenbergMarquardtScaled 1e-12 1e-12 niter model jacob t0
+    (t_opt, path) = nlFitting LevenbergMarquardtScaled 1e-20 1e-15 niter model jacob t0
     iters         = fst . size  
     n             = VS.length t0
     m             = VS.length ys
@@ -49,7 +49,7 @@ minimizeNLL dist msErr niter xss ys tree t0
   | n > m      = (t0, 0)
   | otherwise  = (t_opt, iters path)
   where
-    (t_opt, path) = minimizeVD VectorBFGS2 1e-20 niter 0.1 0.01 model jacob t0
+    (t_opt, path) = minimizeVD ConjugateFR 1e-20 niter 1e-15 1e-3 model jacob t0
 
     iters = fst . size   
     n     = VS.length t0
@@ -64,13 +64,13 @@ minimizeNLLWithFixedParam dist msErr niter xss ys tree ix t0
   | n > m      = (t0, 0)
   | otherwise  = (t_opt, iters path)
   where
-    (t_opt, path) = minimizeVD VectorBFGS2 1e-6 niter 1e-3 1e-6 model jacob t0
+    (t_opt, path) = minimizeVD ConjugateFR 1e-20 niter 1e-16 1e-3 model jacob t0
 
     iters   = fst . size   
     n       = VS.length t0
     m       = VS.length ys
     model   = nll dist msErr xss ys tree
-    jacob t = gradNLL dist msErr xss ys tree t VS.// [(ix, 0.0)]
+    jacob t = gradNLL dist msErr xss ys tree t VS.// [(ix, 0.0)] 
 
 minimizeGaussian :: Int -> Columns -> Column -> Fix SRTree -> VS.Vector Double -> (VS.Vector Double, Int)
 minimizeGaussian = minimizeNLL Gaussian Nothing
