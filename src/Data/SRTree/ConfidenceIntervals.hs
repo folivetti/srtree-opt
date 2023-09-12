@@ -16,9 +16,6 @@ import Data.SRTree.Opt
 import Numeric.GSL.Interpolation
 import Data.List ( sortOn )
 import qualified Numeric.LinearAlgebra.Static as LAS
-import GHC.TypeLits
-import Data.Proxy
-import qualified Data.SRTree.Print as P 
 
 import Debug.Trace ( trace )
 
@@ -201,7 +198,7 @@ getStatsFromModel dist mSErr xss ys tree theta = MkStats cov corr stdErr
 -- Create splines for profile-t
 createSplines :: VS.Vector Double -> LA.Matrix Double -> Double -> Double -> Int -> (Double -> Double, Double -> Double)
 createSplines taus thetas se tau_max ix
-  | VS.length taus < 2 = trace "OI" $ (evaluate CSpline [(-tau_max, -se), (tau_max, se)], evaluate CSpline [(-se, 0), (se, 1)])
+  | VS.length taus < 2 = (evaluate CSpline [(-tau_max, -se), (tau_max, se)], evaluate CSpline [(-se, 0), (se, 1)])
   | otherwise          = (tau2theta, theta2tau)
   where
     aa = sortOnFirst taus (getCol ix thetas)
