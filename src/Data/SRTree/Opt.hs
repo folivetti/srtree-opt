@@ -49,7 +49,8 @@ minimizeNLL dist msErr niter xss ys tree t0
   | n > m      = (t0, 0)
   | otherwise  = (t_opt, iters path)
   where
-    (t_opt, path) = minimizeVD ConjugateFR 1e-20 niter 1e-15 1e-3 model jacob t0
+    (t_opt, path) = minimizeVD ConjugateFR 1e-20 niter 1e-1 1e-2 model jacob t0
+    -- (t_opt, path) = minimizeVD ConjugateFR 1e-20 niter 1e-15 1e-3 model jacob t0
 
     iters = fst . size   
     n     = VS.length t0
@@ -64,7 +65,8 @@ minimizeNLLWithFixedParam dist msErr niter xss ys tree ix t0
   | n > m      = (t0, 0)
   | otherwise  = (t_opt, iters path)
   where
-    (t_opt, path) = minimizeVD ConjugateFR 1e-20 niter 1e-16 1e-3 model jacob t0
+    (t_opt, path) = minimizeVD ConjugateFR 1e-20 niter 1e-1 1e-2 model jacob t0
+    --(t_opt, path) = minimizeVD ConjugateFR 1e-20 niter 1e-16 1e-3 model jacob t0
 
     iters   = fst . size   
     n       = VS.length t0

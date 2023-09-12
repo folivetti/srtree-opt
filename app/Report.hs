@@ -107,15 +107,15 @@ getDataset args = do
 getBasicStats :: Args -> StdGen -> Datasets -> Fix SRTree -> Int -> BasicInfo
 getBasicStats args seed dset tree ix = Basic ix (infile args) tOpt nNodes nParams params n
   where
-    theta0    = snd (floatConstsToParam tree)
-    thetas    = if restart args
-                  then take nParams (normals seed)
-                  else theta0
-    (_, t, n) = optimize (dist args) (msErr args) (niter args) (_xTr dset) (_yTr dset) (Just thetas) tree
-    tOpt      = paramsToConst (VS.toList t) tree
-    nNodes    = countNodes tOpt :: Int
-    nParams   = VS.length t
-    params    = VS.toList t
+    (tree', theta0) = floatConstsToParam tree
+    thetas          = if restart args
+                        then take nParams (normals seed)
+                        else theta0
+    (_, t, n)       = optimize (dist args) (msErr args) (niter args) (_xTr dset) (_yTr dset) (Just thetas) tree
+    tOpt            = paramsToConst (VS.toList t) tree'
+    nNodes          = countNodes tOpt :: Int
+    nParams         = length theta0
+    params          = VS.toList t
 
 getSSE :: Datasets -> Fix SRTree -> SSE
 getSSE dset tree = SSE tr val te
@@ -184,10 +184,10 @@ getCI args dset basic alpha' = (stats', cis, pis_tr, pis_val, pis_te)
     jac xss   = LA.toRows . LA.fromColumns $ snd $ reverseModeUnique xss (VS.fromList theta) VS.singleton tree
 
     cis       = paramCI method (LA.size yTr) (VS.fromList theta) alpha' 
-    pis_tr    = predictionCI method predFun jac prof xTr tree (VS.fromList theta) alpha' 
+    pis_tr    = predictionCI method dist' predFun jac prof xTr tree (VS.fromList theta) alpha' 
     pis_val   = case (_xVal dset, _yVal dset) of
                   (Nothing, _)   -> []
-                  (Just xVal, _) -> predictionCI method predFun jac prof xVal tree (VS.fromList theta) alpha'
+                  (Just xVal, _) -> predictionCI method dist' predFun jac prof xVal tree (VS.fromList theta) alpha'
     pis_te    = case (_xTe dset, _yTe dset) of
                   (Nothing, _)  -> []
-                  (Just xTe, _) -> predictionCI method predFun jac prof xTe tree (VS.fromList theta) alpha'
+                  (Just xTe, _) -> predictionCI method dist' predFun jac prof xTe tree (VS.fromList theta) alpha'

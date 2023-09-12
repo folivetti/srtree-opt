@@ -37,7 +37,7 @@ processTree args seed dset tree ix = (basic, sseOrig, sseOpt, info, cis)
     basic   = getBasicStats args seed dset tree ix
     sseOrig = getSSE dset tree
     sseOpt  = getSSE dset (_expr basic)
-    info    = getInfo args dset tree
+    info    = getInfo args dset (_expr basic)
     cis     = getCI args dset basic (alpha args)
 
 -- print the results to a csv format (except CI)

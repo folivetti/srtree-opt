@@ -83,9 +83,11 @@ nll Gaussian msErr xss ys t theta = 0.5*(ssr/s2 + m*log (2*pi*s2))
 -- y log phi + (1-y) log (1 - phi), assuming y \in {0,1}
 nll Bernoulli _ xss ys tree theta
   | notValid ys = error "For Bernoulli distribution the output must be either 0 or 1."
-  | otherwise   = negSum $ VS.zipWith (\a b -> if a == 0.0 then log (1 - b) else log b) ys yhat
+  | otherwise   = negSum $ VS.zipWith (\a b -> a*b - log (1 + exp b)) ys yhat
+  -- | otherwise   = negSum $ VS.zipWith (\a b -> if a == 0.0 then log (1 - b) else log b) ys yhat
   where
-    yhat     = logistic $ evalTree xss theta VS.singleton tree
+    yhat     = evalTree xss theta VS.singleton tree
+    -- yhat     = logistic $ evalTree xss theta VS.singleton tree
     notValid = VS.any (\x -> x /= 0 && x /= 1)
 
 nll Poisson _ xss ys tree theta 
@@ -117,15 +119,18 @@ gradNLL Gaussian msErr xss ys tree theta = VS.fromList [VS.sum (g * err) / sErr 
 
 gradNLL Bernoulli _ xss ys tree theta
   | notValid ys = error "For Bernoulli distribution the output must be either 0 or 1."
-  | otherwise   = VS.fromList [VS.sum $ (logistic yhat - ys) * g | g <- grad]
+  | otherwise   = VS.fromList [VS.sum $ (yhat - ys) * g | g <- grad']
   where
+    m            = fromIntegral $ LA.size yhat
     yhat         = predict Bernoulli tree theta xss
     grad         = forwardMode xss theta VS.singleton tree
     notValid     = VS.any (\x -> x /= 0 && x /= 1)
+    grad'        = map (LA.cmap nanTo0) grad
+    nanTo0 x     = if isNaN x then 0 else x
 
 gradNLL Poisson _ xss ys tree theta
   | notValid ys = error "For Poisson distribution the output must be non-negative."
-  | otherwise   = VS.fromList [negate . VS.sum $ g * (ys - exp yhat) | g <- grad]
+  | otherwise   = VS.fromList [negate . VS.sum $ g * (ys - yhat) | g <- grad]
   where
     yhat         = predict Poisson tree theta xss
     grad         = forwardMode xss theta VS.singleton tree
