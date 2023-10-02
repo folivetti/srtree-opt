@@ -15,6 +15,7 @@ import Numeric.GSL.Minimization (MinimizeMethodD (..), minimizeVD)
 import Numeric.LinearAlgebra ( size, fromColumns )
 import Data.SRTree.Likelihoods
 import Debug.Trace ( trace )
+import Data.SRTree.Print ( showExpr )
 
 optimize :: Maybe Distribution -> Maybe Double -> Int -> Columns -> Column -> Maybe [Double] -> Fix SRTree -> (Fix SRTree, VS.Vector Double, Int)
 optimize mDist mSErr nIter xss ys mTheta tree = (optTree, optTheta, steps)
@@ -26,7 +27,7 @@ optimize mDist mSErr nIter xss ys mTheta tree = (optTree, optTheta, steps)
                           Just x  -> VS.fromList x
     (optTheta, steps) = case mDist of
                           Nothing   -> leastSquares nIter xss ys optTree t0 
-                          Just dist -> minimizeNLL dist mSErr nIter xss ys optTree t0
+                          Just dist -> trace (showExpr optTree) $ minimizeNLL dist mSErr nIter xss ys optTree t0
 
 leastSquares :: Int -> Columns -> Column -> Fix SRTree -> VS.Vector Double -> (VS.Vector Double, Int)
 leastSquares niter xss ys tree t0

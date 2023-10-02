@@ -43,7 +43,7 @@ packages:
 extra-deps:                                                                                                   
   - hegg-0.3.0.0
   - git: https://github.com/folivetti/srtree.git
-    commit: 430e7554f927d420e246d4c4a7031486430dc16f
+    commit: f4ef898f24aeed7f83d85d118cf99edb1380ec10
   - git: https://github.com/folivetti/srtree-datasets.git
     commit: 29fcb0f10dc77d5fdeb28bf50d633cef332d329f
 #  - pandoc-symreg-0.2.1.2
