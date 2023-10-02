@@ -27,7 +27,7 @@ optimize mDist mSErr nIter xss ys mTheta tree = (optTree, optTheta, steps)
                           Just x  -> VS.fromList x
     (optTheta, steps) = case mDist of
                           Nothing   -> leastSquares nIter xss ys optTree t0 
-                          Just dist -> trace (showExpr optTree) $ minimizeNLL dist mSErr nIter xss ys optTree t0
+                          Just dist -> minimizeNLL dist mSErr nIter xss ys optTree t0
 
 leastSquares :: Int -> Columns -> Column -> Fix SRTree -> VS.Vector Double -> (VS.Vector Double, Int)
 leastSquares niter xss ys tree t0

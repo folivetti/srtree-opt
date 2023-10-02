@@ -112,7 +112,7 @@ getBasicStats args seed dset tree ix = Basic ix (infile args) tOpt nNodes nParam
     thetas          = if restart args
                         then take nParams (normals seed)
                         else theta0
-    (_, t, n)       = trace (show thetas) $ optimize (dist args) (msErr args) (niter args) (_xTr dset) (_yTr dset) (Just thetas) tree
+    (_, t, n)       = optimize (dist args) (msErr args) (niter args) (_xTr dset) (_yTr dset) (Just thetas) tree
     tOpt            = paramsToConst (VS.toList t) tree'
     nNodes          = countNodes tOpt :: Int
     nParams         = length theta0

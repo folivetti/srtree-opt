@@ -105,7 +105,7 @@ predict Poisson   tree theta xss = exp $ evalTree xss theta VS.singleton tree
 
 -- | Gradient of the negative log-likelihood
 gradNLL :: Distribution -> Maybe Double -> Columns -> Column -> Fix SRTree -> VS.Vector Double -> VS.Vector Double
-gradNLL Gaussian msErr xss ys tree theta = let aa = VS.fromList [VS.sum (g * err) / sErr * sErr | g <- grad] in trace (show aa <> " " <> show (length grad)) aa
+gradNLL Gaussian msErr xss ys tree theta = VS.fromList [VS.sum (g * err) / sErr * sErr | g <- grad]
   where
     m            = fromIntegral $ VS.length ys
     p            = fromIntegral $ VS.length theta
