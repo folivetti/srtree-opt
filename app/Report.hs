@@ -68,9 +68,13 @@ data SSE = SSE { _sseTr  :: Double
 -- model selection fields
 modelFields :: [String]
 modelFields = [ "BIC"
+              , "BIC_val"
               , "AIC"
+              , "AIC_val"
               , "MDL"
               , "MDL_Freq"
+              , "MDL_val"
+              , "MDL_Freq_val"
               , "NegLogLikelihood_train"
               , "NegLogLikelihood_val"
               , "NegLogLikelihood_test"
@@ -81,9 +85,13 @@ modelFields = [ "BIC"
 
 -- model selection information
 data Info = Info { _bic     :: Double
+                 , _bicVal  :: Double
                  , _aic     :: Double
+                 , _aicVal  :: Double
                  , _mdl     :: Double
                  , _mdlFreq :: Double
+                 , _mdlVal  :: Double
+                 , _mdlFreqVal :: Double
                  , _nllTr   :: Double
                  , _nllVal  :: Double
                  , _nllTe   :: Double
@@ -132,12 +140,16 @@ getSSE dset tree = SSE tr val te
             (_, Nothing)           -> 0.0
             (Just xTe, Just yTe)   -> sse xTe yTe t (VS.fromList th)
 
-getInfo :: Args -> Datasets -> Fix SRTree -> Info
-getInfo args dset tree =
+getInfo :: Args -> Datasets -> Fix SRTree -> Fix SRTree -> Info
+getInfo args dset tree treeVal =
   Info { _bic     = bic dist' msErr' xTr yTr thetaOpt' tOpt
+       , _bicVal  = bicVal
        , _aic     = aic dist' msErr' xTr yTr thetaOpt' tOpt
+       , _aicVal  = aicVal
        , _mdl     = mdl dist' msErr' xTr yTr thetaOpt' tOpt
        , _mdlFreq = mdlFreq dist' msErr' xTr yTr thetaOpt' tOpt
+       , _mdlVal  = mdlVal
+       , _mdlFreqVal = mdlFreqVal
        , _nllTr   = nllTr
        , _nllVal  = nllVal
        , _nllTe   = nllTe
@@ -147,15 +159,39 @@ getInfo args dset tree =
        }
   where
     (xTr, yTr)       = (_xTr dset, _yTr dset)
+    (xVal, yVal)     = case (_xVal dset, _yVal dset) of
+                         (Nothing, _)     -> (xTr, yTr)
+                         (_, Nothing)     -> (xTr, yTr)
+                         (Just a, Just b) -> (a, b)
     (tOpt, thetaOpt) = floatConstsToParam tree
     thetaOpt'        = VS.fromList thetaOpt
+
+    (tOptVal, thetaOptVal) = floatConstsToParam treeVal
+    thetaOptVal'           = VS.fromList thetaOptVal
+
     dist'            = fromMaybe Gaussian (dist args)
     msErr'           = msErr args
     nllTr            = nll dist' msErr' (_xTr dset) (_yTr dset) tOpt (VS.fromList thetaOpt)
+    bicVal           = case (_xVal dset, _yVal dset) of
+                         (Nothing, _) -> 0.0
+                         (_, Nothing) -> 0.0
+                         _            -> bic dist' msErr' xVal yVal thetaOptVal' tOptVal
+    aicVal           = case (_xVal dset, _yVal dset) of
+                         (Nothing, _) -> 0.0
+                         (_, Nothing) -> 0.0
+                         _            -> aic dist' msErr' xVal yVal thetaOptVal' tOptVal
     nllVal           = case (_xVal dset, _yVal dset) of
-                         (Nothing, _)           -> 0.0
-                         (_, Nothing)           -> 0.0
-                         (Just xVal, Just yVal) -> nll dist' msErr' xVal yVal tOpt (VS.fromList thetaOpt)
+                         (Nothing, _) -> 0.0
+                         (_, Nothing) -> 0.0
+                         _            -> nll dist' msErr' xVal yVal tOptVal (VS.fromList thetaOptVal)
+    mdlVal           = case (_xVal dset, _yVal dset) of
+                         (Nothing, _) -> 0.0
+                         (_, Nothing) -> 0.0
+                         _            -> mdl dist' msErr' xVal yVal thetaOptVal' tOptVal
+    mdlFreqVal       = case (_xVal dset, _yVal dset) of
+                         (Nothing, _) -> 0.0
+                         (_, Nothing) -> 0.0
+                         _            -> mdlFreq dist' msErr' xVal yVal thetaOptVal' tOptVal
     nllTe            = case (_xTe dset, _yTe dset) of
                          (Nothing, _)           -> 0.0
                          (_, Nothing)           -> 0.0

@@ -35,9 +35,13 @@ processTree :: Args        -- command line arguments
 processTree args seed dset tree ix = (basic, sseOrig, sseOpt, info, cis)
   where
     basic   = getBasicStats args seed dset tree ix
+    treeVal = case (_xVal dset, _yVal dset) of
+                (Nothing, _) -> _expr basic
+                (_, Nothing) -> _expr basic
+                (Just xV, Just yV) -> _expr $ getBasicStats args seed dset{_xTr = xV, _yTr = yV} tree ix
     sseOrig = getSSE dset tree
     sseOpt  = getSSE dset (_expr basic)
-    info    = getInfo args dset (_expr basic)
+    info    = getInfo args dset (_expr basic) treeVal
     cis     = getCI args dset basic (alpha args)
 
 -- print the results to a csv format (except CI)
