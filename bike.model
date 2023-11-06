@@ -1,0 +1,4 @@
+Log(1 + ((34.795 - (0.051535 * Humidity)) + date_dec_yearly) + ((Temperature * 0.59723) + WindSpeed))
+0.0463 * Temperature - Sqrt(Humidity + 668.79) + 32.76
+((((((((((Exp((Temperature * 0.14197412)) * -28.169514) + (Temperature * 177.32869)) + (Humidity * -35.455525)) + Exp(((FunctioningDay * 8.8266581) + (Rainfall * -1.3207561)))) * (((FunctioningDay * 0.00027288103) + (Hour * 7.3034346e-06)) + (Seasons_Winter * -7.2712599e-05))) * 1.0319692) + (FunctioningDay * 4.0104302)) + (Holiday * -0.36177268)) + (date_dec_yearly * 0.39734289)) + -0.30338707)
+((((((((((Temperature * 177.32869)) + (Humidity * -35.455525))) * (((Hour * 7.3034346e-06)))) * 1.0319692)))) + -0.30338707)

@@ -5,7 +5,7 @@ import qualified Numeric.LinearAlgebra as LA
 import Data.Maybe ( fromMaybe )
 import Statistics.Distribution.FDistribution ( fDistribution )
 import Statistics.Distribution ( quantile )
-import System.Random ( StdGen )
+import System.Random ( StdGen, split )
 import Data.Random.Normal ( normals )
 
 import Data.SRTree ( SRTree, Fix (..), floatConstsToParam, paramsToConst, countNodes )
@@ -13,7 +13,7 @@ import Data.SRTree.AD ( reverseModeUnique )
 import Data.SRTree.Likelihoods
 import Data.SRTree.ModelSelection ( aic, bic, logFunctional, logParameters, mdl, mdlFreq )
 import Data.SRTree.ConfidenceIntervals
-import Data.SRTree.Opt (optimize, minimizeNLLWithFixedParam)
+import Data.SRTree.Opt (optimize, minimizeNLLWithFixedParam, minimizeNLL)
 import Data.SRTree.Datasets ( loadDataset )
 import Debug.Trace ( trace )
 
@@ -114,7 +114,9 @@ getDataset args = do
   pure (DS xTr yTr mXVal mYVal mXTe mYTe, varnames)
 
 getBasicStats :: Args -> StdGen -> Datasets -> Fix SRTree -> Int -> BasicInfo
-getBasicStats args seed dset tree ix = Basic ix (infile args) tOpt nNodes nParams params n
+getBasicStats args seed dset tree ix
+  | anyNaN    = getBasicStats args (snd $ split seed) dset tree ix
+  | otherwise = Basic ix (infile args) tOpt nNodes nParams params n
   where
     (tree', theta0) = floatConstsToParam tree
     thetas          = if restart args
@@ -125,6 +127,7 @@ getBasicStats args seed dset tree ix = Basic ix (infile args) tOpt nNodes nParam
     nNodes          = countNodes tOpt :: Int
     nParams         = length theta0
     params          = VS.toList t
+    anyNaN          = VS.any isNaN t
 
 getSSE :: Datasets -> Fix SRTree -> SSE
 getSSE dset tree = SSE tr val te
@@ -207,17 +210,17 @@ getCI args dset basic alpha' = (stats', cis, pis_tr, pis_val, pis_te)
     dist'      = fromMaybe Gaussian (dist args)
     msErr'     = msErr args
     stats'     = getStatsFromModel dist' msErr' xTr yTr tree (VS.fromList theta)
-    profiles  = getAllProfiles dist' msErr' xTr yTr tree (VS.fromList theta) (_stdErr stats')
+    profiles   = getAllProfiles dist' msErr' xTr yTr tree (VS.fromList theta) (_stdErr stats')
     method     = if useProfile args
-                  then Profile stats' profiles
-                  else Laplace stats'
+                   then Profile stats' profiles
+                   else Laplace stats'
     predFun   = predict dist' tree (VS.fromList theta)
     stdErr    = _stdErr stats' VS.! 0
 
-    prof th t = let (thOpt, _) = minimizeNLLWithFixedParam dist' msErr' 10 xTr yTr t 0 th
+    prof th t = let (thOpt, _) = minimizeNLL dist' msErr' 1000 xTr yTr t th
                  in case getProfile dist' msErr' xTr yTr t thOpt stdErr tau_max 0 of
                       Left th' -> prof th' t
-                      Right p  -> _tau2theta p
+                      Right p  -> (_tau2theta p, _opt p)
     jac xss   = LA.toRows . LA.fromColumns $ snd $ reverseModeUnique xss (VS.fromList theta) VS.singleton tree
 
     cis       = paramCI method (LA.size yTr) (VS.fromList theta) alpha' 

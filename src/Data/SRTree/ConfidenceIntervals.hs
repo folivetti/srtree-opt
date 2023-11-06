@@ -33,10 +33,10 @@ data CI = CI { est_   :: Double
 
 data ProfileT = ProfileT { _taus      :: LA.Vector Double
                          , _thetas    :: LA.Matrix Double
-                         , _deltas    :: LA.Vector Double
+                         , _opt       :: Double
                          , _tau2theta :: Double -> Double
                          , _theta2tau :: Double -> Double
-                         }
+                         } 
 
 showCI :: Int -> CI -> String
 showCI n (CI x l h) = show (rnd l) <> " <= " <> show (rnd x) <> " <= " <> show (rnd h)
@@ -54,16 +54,17 @@ paramCI (Laplace stats) nSamples theta alpha = zipWith3 CI (VS.toList theta) low
     lows   = VS.toList $ VS.zipWith (-) theta $ VS.map (*t) stdErr
     highs  = VS.toList $ VS.zipWith (+) theta $ VS.map (*t) stdErr
 
-paramCI (Profile stats profiles) nSamples theta alpha = zipWith3 CI (VS.toList theta) lows highs
+paramCI (Profile stats profiles) nSamples _ alpha = zipWith3 CI theta lows highs
   where
-    k        = VS.length theta
+    k        = length theta
     t        = quantile (studentT . fromIntegral $ nSamples - k) (1 - alpha / 2.0)
     stdErr   = _stdErr stats
     lows     = map (\p -> _tau2theta p (-t)) profiles
     highs    = map (\p -> _tau2theta p t) profiles
+    theta    = map _opt profiles
 
 -- predictionCI :: CIType -> Columns -> Column -> Columns -> Fix SRTree -> VS.Vector Double -> Double -> [CI]
-predictionCI :: CIType -> Distribution -> (Columns -> Column) -> (Columns -> [VS.Vector Double]) -> (VS.Vector Double -> Fix SRTree -> Double -> Double) -> Columns -> Fix SRTree -> VS.Vector Double -> Double -> [CI]
+predictionCI :: CIType -> Distribution -> (Columns -> Column) -> (Columns -> [VS.Vector Double]) -> (VS.Vector Double -> Fix SRTree -> (Double -> Double, Double)) -> Columns -> Fix SRTree -> VS.Vector Double -> Double -> [CI]
 predictionCI (Laplace stats) _ predFun jacFun _ xss tree theta alpha = zipWith3 CI (VS.toList yhat) lows highs
   where
     yhat  = predFun xss
@@ -77,22 +78,24 @@ predictionCI (Laplace stats) _ predFun jacFun _ xss tree theta alpha = zipWith3 
     getResStdError row = sqrt $ LA.dot row $ LA.fromList $ map (LA.dot row . (cov LA.!)) [0 .. k-1]
     resStdErr          = VS.fromList $ map getResStdError jac
 
-predictionCI (Profile _ _) dist predFun _ profFun xss tree theta alpha = zipWith f (VS.toList yhat) xss'
+predictionCI (Profile _ _) dist predFun _ profFun xss tree theta alpha = zipWith f (VS.toList yhat) $ take 10 xss'
   where
     yhat = predFun xss
 
-    t       = quantile (studentT . fromIntegral $ LA.size yhat - VS.length theta) (alpha / 2.0)
+    t       = quantile (studentT . fromIntegral $ LA.size yhat - VS.length theta) (1 - alpha / 2.0)
+    tau_max = quantile (fDistribution nParams (LA.size yhat - nParams)) (1 - 0.01)
+    nParams = VS.length theta
     theta0  = calcTheta0 dist tree
     xss'    = LA.toRows $ LA.fromColumns $ V.toList xss
     
-    f yh xs = let t' = replaceParam0 tree $ evalVar xs theta0
-                  spline = profFun theta t'
-               in CI yh (spline t) (spline (-t))
+    f yh xs = let t'            = replaceParam0 tree $ evalVar xs theta0
+                  (spline, yh') = profFun (theta VS.// [(0, yh)]) t'
+              in CI yh' (spline (-t)) (spline t)
 
 inverseDist :: Floating p => Distribution -> p -> p
-inverseDist Gaussian y = y 
+inverseDist Gaussian y  = y
 inverseDist Bernoulli y = log(y/(1-y))
-inverseDist Poisson y = log y 
+inverseDist Poisson y   = log y
 
 replaceParam0 :: Fix SRTree -> Fix SRTree -> Fix SRTree
 replaceParam0 tree t0 = cata alg tree
@@ -145,41 +148,80 @@ getAllProfiles dist mSErr xss ys tree theta stdErr = reverse (getAll 0 [])
                                       Left t  -> getAllProfiles dist mSErr xss ys tree t stdErr
                                       Right p -> getAll (ix + 1) (p : acc)
 
-getProfile dist mSErr xss ys tree theta stdErr_i tau_max ix = 
-  do negDelta <- go 500 (-stdErr_i / 8) 0 1 mempty
-     posDelta <- go 500  (stdErr_i / 8) 0 1 ([0], [theta], [0])
-     let (LA.fromList -> taus, LA.fromRows -> thetas, LA.fromList -> deltas) = negDelta <> posDelta
-         (tau2theta, theta2tau) = createSplines taus thetas stdErr_i tau_max ix
-     pure $ ProfileT taus thetas deltas tau2theta theta2tau
+getProfile :: Distribution 
+           -> Maybe Double 
+           -> V.Vector Column 
+           -> VS.Vector Double 
+           -> Fix SRTree 
+           -> VS.Vector Double 
+           -> Double -> Double 
+           -> Int 
+           -> Either (VS.Vector Double) ProfileT
+getProfile dist mSErr xss ys tree theta stdErr_i tau_max ix
+  | stdErr_i == 0.0 = pure $ ProfileT (LA.fromList [-tau_max, tau_max]) (LA.fromRows [theta, theta]) (theta VS.! ix) (const (theta VS.! ix)) (const tau_max)
+  | otherwise =
+  do negDelta <- go kmax (-stdErr_i / 8) 0 1 mempty
+     posDelta <- go kmax  (stdErr_i / 8) 0 1 p0
+     let (LA.fromList -> taus, LA.fromRows -> thetas) = negDelta <> posDelta
+         (tau2theta, theta2tau)                       = createSplines taus thetas stdErr_i tau_max ix
+     pure $ ProfileT taus thetas optTh tau2theta theta2tau
   where
-    nll_opt = nll dist mSErr xss ys tree theta
-    go 0 _     _ _         acc = Right acc
-    go k delta t inv_slope acc
-      | nll_cond < nll_opt = Left theta_t
-      | isNaNTheta && fstIter = Right ([tau1], [theta], [0]) 
-      | isNaNTheta         = Right $ extr_pts <> acc 
-      | abs tau > tau_max  = Right (([tau], [theta_t], [delta_t]) <> acc) 
-      | otherwise          = go (k-1) delta (t + inv_slope) inv_slope' (([tau], [theta_t], [delta_t]) <> acc) 
-      where
-        zv         = gradNLL dist mSErr xss ys tree theta_t VS.! ix
-        inv_slope' = min 4.0 . max 0.0625 . abs $ (tau / (stdErr_i * zv))
-        theta_t    = fst
-                   $ minimizeNLLWithFixedParam dist mSErr 100 xss ys tree ix theta_t'
-        theta_t'   = theta VS.// [(ix, (theta VS.! ix) + delta * (t + inv_slope))]
-        nll_cond   = nll dist mSErr xss ys tree theta_t
-        tau        = signum delta * sqrt (2*nll_cond - 2*nll_opt)
-        delta_t    = (theta_t VS.! ix - theta VS.! ix) / stdErr_i
+    p0        = ([0], [theta_opt])
+    kmax      = 50
+    nll_opt   = nll dist mSErr xss ys tree theta_opt
+    theta_opt = fst $ minimizeNLL dist mSErr 100 xss ys tree theta
+    optTh     = theta_opt VS.! ix
+    dflt      = ([tau_max], [theta]) -- check
+    minimizer = fst . minimizeNLLWithFixedParam dist mSErr 100 xss ys tree ix
 
-        fstIter = case acc of
-                    ([], [], []) -> True
-                    _ -> False
-        ((tau0:_), (t0:_), _) = acc 
-        tau1 = if delta < 0 then negate tau_max else tau_max 
-        t1 = tau1 * (t0 VS.! ix) / tau0
-        t1' = theta VS.// [(ix, t1)]
-        extr_pts   = ([tau1], [t1'], [delta_t])
-        isNaNTheta = isNaN $ nll dist mSErr xss ys tree theta_t'
-        delta_t'   = (t1 - theta VS.! ix) / stdErr_i
+    lagrange k xs' ys' x = sum [ yi * product [(x - xk)/(xi - xk) | xk <- as, xi /= xk] | (xi, yi) <- zip as bs]
+      where
+        as  = take (k+1) xs'
+        bs  = take (k+1) ys'
+
+    interpolate x ([], [])                    = dflt
+    interpolate x acc@([_], [_])              = dflt <> acc
+    interpolate x acc@([t0, t1], [th0, th1])  = ([x], [ths]) <> acc
+        where 
+            (y0, y1) = (th0 VS.! ix, th1 VS.! ix)
+            th       = (y1 - y0)/(t1-t0) * (x - t0) + y0
+            ths      = theta VS.// [(ix, th)]
+    interpolate x acc@([t0, t1, t2], [th0, th1, th2]) = ([x], [ths]) <> acc
+        where
+            th           = a * (x - t1) * (x - t0) + diff10 * (x - t0) + y0
+            ths          = theta VS.// [(ix, th)]
+            (y0, y1, y2) = (th0 VS.! ix, th1 VS.! ix, th2 VS.! ix)
+            a            = (diff21 - diff10) / (t2 - t0)
+            diff10       = (y1 - y0) / (t1 - t0)
+            diff21       = (y2 - y1) / (t2 - t1)
+    interpolate x acc@(taus, thetas) = ([x], [ths]) <> acc
+        where
+            th  = lagrange 3 taus (map (VS.! ix) thetas) x
+            ths = theta VS.// [(ix, th)]
+
+    go 0 delta _ _         acc = Right $ interpolate (signum delta * tau_max) acc
+    go k delta t inv_slope acc
+      | nll_cond == nll_opt || simPrev = go (k-1) delta' (t + inv_slope) inv_slope' acc
+      | nll_cond < nll_opt  = Left theta_t -- found a better optima
+      | isNaNTheta          = Right $ interpolate (signum delta * tau_max) acc
+      | abs tau > tau_max   = Right (acc' <> acc)
+      | otherwise           = go (k-1) delta' (t + inv_slope) inv_slope' (acc' <> acc)
+      where
+        acc'        = ([tau], [theta_t])
+        zv          = gradNLL dist mSErr xss ys tree theta_t VS.! ix
+        inv_slope'  = min 4.0 . max 0.0625 . abs $ (tau / (stdErr_i * zv))
+        theta_t     = minimizer theta_delta
+        theta_delta = theta_opt VS.// [(ix, t_delta)]
+        t_delta     = (theta_opt VS.! ix) + delta * (t + inv_slope)
+        nll_cond    = nll dist mSErr xss ys tree theta_t
+        tau         = signum delta * sqrt (2*(nll_cond - nll_opt))
+        isNaNTheta  = isNaN $ nll dist mSErr xss ys tree theta_delta
+        delta'      = if slow tau acc then 2 * delta else delta
+        simPrev     = length (fst acc) > 0 && tau == head (fst acc)
+
+        slow x ([], [])   = False
+        slow x ((y:_),_)  = abs (x - y) < 1e-1 && abs (x - tau_max) > 1e-1
+
 
 -- tau0, tau1  theta0, thetaX = tau1 theta0 / tau0
 getStatsFromModel :: Distribution -> Maybe Double -> Columns -> Column -> Fix SRTree -> VS.Vector Double -> BasicStats
@@ -189,7 +231,7 @@ getStatsFromModel dist mSErr xss ys tree theta = MkStats cov corr stdErr
     hess :: LA.Matrix Double
     hess    = LA.fromLists $ hessianNLL dist mSErr xss ys tree theta
     cov     = case LA.mbChol (LA.sym hess) of
-                Nothing -> error "Hessian of the model is not positive definite"
+                Nothing -> error "Hessian of the model is not positive definite."
                 Just m  -> LA.cholSolve m (LA.ident nParams)
     
     stdErr = sqrt $ LA.takeDiag cov

@@ -92,7 +92,8 @@ nll Bernoulli _ xss ys tree theta
 
 nll Poisson _ xss ys tree theta 
   | notValid ys = error "For Poisson distribution the output must be non-negative."
-  | otherwise = negSum $ ys * yhat - exp yhat
+  | VS.any isNaN yhat = error $ "NaN predictions " <> show theta
+  | otherwise   = negSum $ ys * yhat - ys * log ys - exp yhat
   where
     yhat     = evalTree xss theta VS.singleton tree
     notValid = VS.any (<0)
@@ -130,7 +131,8 @@ gradNLL Bernoulli _ xss ys tree theta
 
 gradNLL Poisson _ xss ys tree theta
   | notValid ys = error "For Poisson distribution the output must be non-negative."
-  | otherwise   = VS.fromList [negate . VS.sum $ g * (ys - yhat) | g <- grad]
+  | any (VS.any isNaN) grad = error "NaN gradient"
+  | otherwise   = VS.fromList [VS.sum $ g * (yhat - ys) | g <- grad]
   where
     yhat         = predict Poisson tree theta xss
     grad         = forwardMode xss theta VS.singleton tree

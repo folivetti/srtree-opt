@@ -23,26 +23,26 @@ packages:
     commit: f4ef898f24aeed7f83d85d118cf99edb1380ec10
     git: https://github.com/folivetti/srtree.git
 - completed:
-    commit: 29fcb0f10dc77d5fdeb28bf50d633cef332d329f
+    commit: bd0f3caad20cc2e85e2d18f1491bb20cf2747e92
     git: https://github.com/folivetti/srtree-datasets.git
     name: srtree-datasets
     pantry-tree:
-      sha256: 5e715c7f69cee1903ff9f038baefee6025df98f80e6e87b2e7995291261e2b1d
+      sha256: 784a8a787927efa3cf88f1b1793be93ef8bc8c54eb94b61bc75c216b7d17f518
       size: 693
     version: 0.1.0.0
   original:
-    commit: 29fcb0f10dc77d5fdeb28bf50d633cef332d329f
+    commit: bd0f3caad20cc2e85e2d18f1491bb20cf2747e92
     git: https://github.com/folivetti/srtree-datasets.git
 - completed:
-    commit: 8b7ff7258ab3f21c605f218fad45f1d388177110
+    commit: 6cd54f3598083561e30581d95cd5e57b38c63a81
     git: https://github.com/folivetti/pandoc-symreg
     name: pandoc-symreg
     pantry-tree:
-      sha256: 9c6dd1b1335417db3be85497312b67848a6a7353ab5bd0aaaa7c2062f7718924
-      size: 2589
+      sha256: 4d28421c720511db135c2b1a46fce7976e0273b792ef51f536e2bb03397d620d
+      size: 2635
     version: 0.2.1.3
   original:
-    commit: 8b7ff7258ab3f21c605f218fad45f1d388177110
+    commit: 6cd54f3598083561e30581d95cd5e57b38c63a81
     git: https://github.com/folivetti/pandoc-symreg
 snapshots:
 - completed:

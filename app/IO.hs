@@ -67,7 +67,7 @@ toCsv (basic, sseOrig, sseOpt, info, _) = intercalate "," (sBasic <> sSSEOrig <>
                 ]
     sSSEOrig  = map (showF sseOrig) [_sseTr, _sseVal, _sseTe]
     sSSEOpt   = map (showF sseOpt)  [_sseTr, _sseVal, _sseTe]
-    sInfo     = map (showF info) [_bic, _aic, _mdl, _mdlFreq, _nllTr, _nllVal, _nllTe, _cc, _cp]
+    sInfo     = map (showF info) [_bic, _bicVal, _aic, _aicVal, _mdl, _mdlFreq, _mdlVal, _mdlFreqVal, _nllTr, _nllVal, _nllTe, _cc, _cp]
              <> [intercalate ";" (map show (_fisher info))]
     showF p f = show (f p)
 
