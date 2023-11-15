@@ -131,7 +131,7 @@ gradNLL Bernoulli _ xss ys tree theta
 
 gradNLL Poisson _ xss ys tree theta
   | notValid ys = error "For Poisson distribution the output must be non-negative."
-  | any (VS.any isNaN) grad = error "NaN gradient"
+  | any (VS.any isNaN) grad = error $ "NaN gradient " <> show grad
   | otherwise   = VS.fromList [VS.sum $ g * (yhat - ys) | g <- grad]
   where
     yhat         = predict Poisson tree theta xss
