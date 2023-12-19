@@ -24,9 +24,13 @@ aic dist mSErr xss ys theta tree = 2 * (p + 1) + 2 * nll dist mSErr xss ys tree 
 -- | MDL as described in 
 -- Bartlett, Deaglan J., Harry Desmond, and Pedro G. Ferreira. "Exhaustive symbolic regression." IEEE Transactions on Evolutionary Computation (2023).
 mdl :: Distribution -> Maybe Double -> Columns -> Column -> VS.Vector Double -> Fix SRTree -> Double
-mdl dist mSErr xss ys theta tree = nll' dist mSErr xss ys theta tree
+mdl dist mSErr xss ys theta tree = nll' dist mSErr xss ys theta' tree
                                  + logFunctional tree
                                  + logParameters dist mSErr xss ys theta tree
+  where
+    fisher = fisherNLL dist mSErr xss ys tree theta
+    theta' = VS.fromList $ map (\(t,f) -> if isSignificant t f then t else 0.0) $ zip (VS.toList theta) fisher
+    isSignificant v f = abs (v / sqrt(12 / f) ) >= 1
 {-# INLINE mdl #-}
 
 -- | same as `mdl` but weighting the functional structure by frequency calculated using a wiki information of
@@ -60,15 +64,15 @@ logFunctionalFreq tree = treeToNat tree'
 logParameters :: Distribution -> Maybe Double -> Columns -> Column -> VS.Vector Double -> Fix SRTree -> Double
 logParameters dist mSErr xss ys theta tree = -(p / 2) * log 3 + 0.5 * logFisher + logTheta
   where
-    p      = fromIntegral $ VS.length theta
+    -- p      = fromIntegral $ VS.length theta
     fisher = fisherNLL dist mSErr xss ys tree theta
 
-    (logTheta, logFisher) = foldr addIfSignificant (0, 0) 
-                          $ zip (VS.toList theta) fisher
+    (logTheta, logFisher, p) = foldr addIfSignificant (0, 0, 0)
+                             $ zip (VS.toList theta) fisher
 
-    addIfSignificant (v, f) (acc_v, acc_f)
-       | isSignificant v f = (acc_v + log (abs v), acc_f + log f)
-       | otherwise         = (acc_v, acc_f)
+    addIfSignificant (v, f) (acc_v, acc_f, acc_p)
+       | isSignificant v f = (acc_v + log (abs v), acc_f + log f, acc_p + 1)
+       | otherwise         = (acc_v, acc_f, acc_p)
 
     isSignificant v f = abs (v / sqrt(12 / f) ) >= 1
 
