@@ -3,7 +3,7 @@
 {-# language ImportQualifiedPost #-}
 {-# language ViewPatterns #-}
 module Data.SRTree.Opt
-    ( optimize, sse, mse, rmse, Column, Columns, minimizeNLL, minimizeNLLWithFixedParam, minimizeGaussian, minimizeBinomial, minimizePoisson, nll, Distribution (..), gradNLL, fisherNLL )
+    ( optimize, sse, mse, rmse, Column, Columns, minimizeNLL, minimizeNLLWithFixedParam, minimizeGaussian, minimizeBinomial, minimizePoisson, nll, Distribution (..), gradNLL, fisherNLL, hessianNLL )
     where
 
 import Data.SRTree ( SRTree (..), Fix(..), floatConstsToParam )

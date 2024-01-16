@@ -4,6 +4,7 @@ import qualified Data.Vector.Storable as VS
 import Data.SRTree
 import Data.SRTree.Recursion ( cata ) 
 import Data.SRTree.Opt
+import qualified Numeric.LinearAlgebra as LA
 
 -- | Bayesian information criterion
 bic :: Distribution -> Maybe Double -> Columns -> Column -> VS.Vector Double -> Fix SRTree -> Double
@@ -21,6 +22,14 @@ aic dist mSErr xss ys theta tree = 2 * (p + 1) + 2 * nll dist mSErr xss ys tree 
     n = fromIntegral $ VS.length ys
 {-# INLINE aic #-}
 
+evidence :: Distribution -> Maybe Double -> Columns -> Column -> VS.Vector Double -> Fix SRTree -> Double
+evidence dist mSErr xss ys theta tree = (1 - b) * nll dist mSErr xss ys tree theta + p / 2 * log b
+  where
+    p = fromIntegral $ VS.length theta
+    n = fromIntegral $ VS.length ys
+    b = 1 / sqrt n
+{-# INLINE evidence #-}
+
 -- | MDL as described in 
 -- Bartlett, Deaglan J., Harry Desmond, and Pedro G. Ferreira. "Exhaustive symbolic regression." IEEE Transactions on Evolutionary Computation (2023).
 mdl :: Distribution -> Maybe Double -> Columns -> Column -> VS.Vector Double -> Fix SRTree -> Double
@@ -32,6 +41,17 @@ mdl dist mSErr xss ys theta tree = nll' dist mSErr xss ys theta' tree
     theta' = VS.fromList $ map (\(t,f) -> if isSignificant t f then t else 0.0) $ zip (VS.toList theta) fisher
     isSignificant v f = abs (v / sqrt(12 / f) ) >= 1
 {-# INLINE mdl #-}
+
+mdlLatt :: Distribution -> Maybe Double -> Columns -> Column -> VS.Vector Double -> Fix SRTree -> Double
+mdlLatt dist mSErr xss ys theta tree = nll' dist mSErr xss ys theta' tree
+                                     + logFunctional tree
+                                     + logParametersLatt dist mSErr xss ys theta tree
+  where
+    fisher = fisherNLL dist mSErr xss ys tree theta
+    theta' = VS.fromList $ map (\(t,f) -> if isSignificant t f then t else 0.0) $ zip (VS.toList theta) fisher
+    isSignificant v f = abs (v / sqrt(12 / f) ) >= 1
+{-# INLINE mdlLatt #-}
+
 
 -- | same as `mdl` but weighting the functional structure by frequency calculated using a wiki information of
 -- physics and engineering functions
@@ -66,6 +86,21 @@ logParameters dist mSErr xss ys theta tree = -(p / 2) * log 3 + 0.5 * logFisher 
   where
     -- p      = fromIntegral $ VS.length theta
     fisher = fisherNLL dist mSErr xss ys tree theta
+
+    (logTheta, logFisher, p) = foldr addIfSignificant (0, 0, 0)
+                             $ zip (VS.toList theta) fisher
+
+    addIfSignificant (v, f) (acc_v, acc_f, acc_p)
+       | isSignificant v f = (acc_v + log (abs v), acc_f + log f, acc_p + 1)
+       | otherwise         = (acc_v, acc_f, acc_p)
+
+    isSignificant v f = abs (v / sqrt(12 / f) ) >= 1
+
+logParametersLatt :: Distribution -> Maybe Double -> Columns -> Column -> VS.Vector Double -> Fix SRTree -> Double
+logParametersLatt dist mSErr xss ys theta tree = 0.5 * p * (1 - log 3) + 0.5 * log detFisher
+  where
+    fisher = fisherNLL dist mSErr xss ys tree theta
+    detFisher = LA.det $ LA.fromLists $ hessianNLL dist mSErr xss ys tree theta
 
     (logTheta, logFisher, p) = foldr addIfSignificant (0, 0, 0)
                              $ zip (VS.toList theta) fisher

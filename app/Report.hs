@@ -11,7 +11,7 @@ import Data.Random.Normal ( normals )
 import Data.SRTree ( SRTree, Fix (..), floatConstsToParam, paramsToConst, countNodes )
 import Data.SRTree.AD ( reverseModeUnique )
 import Data.SRTree.Likelihoods
-import Data.SRTree.ModelSelection ( aic, bic, logFunctional, logParameters, mdl, mdlFreq )
+import Data.SRTree.ModelSelection ( aic, bic, evidence, logFunctional, logParameters, mdl, mdlFreq, mdlLatt )
 import Data.SRTree.ConfidenceIntervals
 import Data.SRTree.Opt (optimize, minimizeNLLWithFixedParam, minimizeNLL)
 import Data.SRTree.Datasets ( loadDataset )
@@ -71,10 +71,14 @@ modelFields = [ "BIC"
               , "BIC_val"
               , "AIC"
               , "AIC_val"
+              , "Evidence"
+              , "EvidenceVal"
               , "MDL"
               , "MDL_Freq"
+              , "MDL_Lattice"
               , "MDL_val"
               , "MDL_Freq_val"
+              , "MDL_Lattice_val"
               , "NegLogLikelihood_train"
               , "NegLogLikelihood_val"
               , "NegLogLikelihood_test"
@@ -88,10 +92,14 @@ data Info = Info { _bic     :: Double
                  , _bicVal  :: Double
                  , _aic     :: Double
                  , _aicVal  :: Double
+                 , _evidence :: Double
+                 , _evidenceVal :: Double
                  , _mdl     :: Double
                  , _mdlFreq :: Double
+                 , _mdlLatt :: Double
                  , _mdlVal  :: Double
                  , _mdlFreqVal :: Double
+                 , _mdlLattVal :: Double
                  , _nllTr   :: Double
                  , _nllVal  :: Double
                  , _nllTe   :: Double
@@ -149,10 +157,14 @@ getInfo args dset tree treeVal =
        , _bicVal  = bicVal
        , _aic     = aic dist' msErr' xTr yTr thetaOpt' tOpt
        , _aicVal  = aicVal
+       , _evidence = evidence dist' msErr' xTr yTr thetaOpt' tOpt
+       , _evidenceVal = evidenceVal
        , _mdl     = mdl dist' msErr' xTr yTr thetaOpt' tOpt
        , _mdlFreq = mdlFreq dist' msErr' xTr yTr thetaOpt' tOpt
+       , _mdlLatt = mdlLatt dist' msErr' xTr yTr thetaOpt' tOpt
        , _mdlVal  = mdlVal
        , _mdlFreqVal = mdlFreqVal
+       , _mdlLattVal = mdlLattVal
        , _nllTr   = nllTr
        , _nllVal  = nllVal
        , _nllTe   = nllTe
@@ -183,6 +195,10 @@ getInfo args dset tree treeVal =
                          (Nothing, _) -> 0.0
                          (_, Nothing) -> 0.0
                          _            -> aic dist' msErr' xVal yVal thetaOptVal' tOptVal
+    evidenceVal      = case (_xVal dset, _yVal dset) of
+                         (Nothing, _) -> 0.0
+                         (_, Nothing) -> 0.0
+                         _            -> evidence dist' msErr' xVal yVal thetaOptVal' tOptVal
     nllVal           = case (_xVal dset, _yVal dset) of
                          (Nothing, _) -> 0.0
                          (_, Nothing) -> 0.0
@@ -195,6 +211,10 @@ getInfo args dset tree treeVal =
                          (Nothing, _) -> 0.0
                          (_, Nothing) -> 0.0
                          _            -> mdlFreq dist' msErr' xVal yVal thetaOptVal' tOptVal
+    mdlLattVal       = case (_xVal dset, _yVal dset) of
+                         (Nothing, _) -> 0.0
+                         (_, Nothing) -> 0.0
+                         _            -> mdlLatt dist' msErr' xVal yVal thetaOptVal' tOptVal
     nllTe            = case (_xTe dset, _yTe dset) of
                          (Nothing, _)           -> 0.0
                          (_, Nothing)           -> 0.0
