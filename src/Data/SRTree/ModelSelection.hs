@@ -23,7 +23,7 @@ aic dist mSErr xss ys theta tree = 2 * (p + 1) + 2 * nll dist mSErr xss ys tree 
 {-# INLINE aic #-}
 
 evidence :: Distribution -> Maybe Double -> Columns -> Column -> VS.Vector Double -> Fix SRTree -> Double
-evidence dist mSErr xss ys theta tree = (1 - b) * nll dist mSErr xss ys tree theta + p / 2 * log b
+evidence dist mSErr xss ys theta tree = (1 - b) * nll dist mSErr xss ys tree theta - p / 2 * log b
   where
     p = fromIntegral $ VS.length theta
     n = fromIntegral $ VS.length ys
