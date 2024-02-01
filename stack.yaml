@@ -48,7 +48,7 @@ extra-deps:
     commit: bd0f3caad20cc2e85e2d18f1491bb20cf2747e92
 #  - pandoc-symreg-0.2.1.2
   - git: https://github.com/folivetti/pandoc-symreg
-    commit: d191c5eed506107b2fed94ee401754997e2a384f
+    commit: 322748da0919215b1577ab9667b7bf63b15b5fcc
     #    commit: 6cd54f3598083561e30581d95cd5e57b38c63a81
 # Override default flag values for local packages and extra-deps
 # flags: {}
